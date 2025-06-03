@@ -470,42 +470,46 @@ const Dashboard = () => {
 
         {/* Recent Achievements & Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Recent Achievements */}
-          <motion.div
+            {/* Recent Achievements */}
+            <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
             className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl"
-          >
+            >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white flex items-center">
+                <h3 className="text-xl font-bold text-white flex items-center">
                 <Award className="w-6 h-6 text-yellow-400 mr-2" />
                 Recent Achievements
-              </h3>
-              <button className="text-purple-400 hover:text-purple-300 text-sm">
+                </h3>
+                <button className="text-purple-400 hover:text-purple-300 text-sm">
                 View All
-              </button>
+                </button>
             </div>
-            
+
             <div className="space-y-3">
-              {achievements.slice(-3).map((achievement, index) => (
-                <motion.div
-                  key={achievement.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.7 + index * 0.1 }}
-                  className="flex items-center p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl"
-                >
-                  <div className="text-2xl mr-3">{achievement.icon}</div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">{achievement.title}</p>
-                    <p className="text-gray-400 text-sm">{achievement.description}</p>
-                  </div>
-                  <div className="text-yellow-400 font-bold">+{achievement.xp} XP</div>
-                </motion.div>
-              ))}
+                {Array.isArray(achievements) ? (
+                achievements.slice(-3).map((achievement, index) => (
+                    <motion.div
+                    key={achievement.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.7 + index * 0.1 }}
+                    className="flex items-center p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl"
+                    >
+                    <div className="text-2xl mr-3">{achievement.icon}</div>
+                    <div className="flex-1">
+                        <p className="text-white font-medium">{achievement.title}</p>
+                        <p className="text-gray-400 text-sm">{achievement.description}</p>
+                    </div>
+                    <div className="text-yellow-400 font-bold">+{achievement.xp} XP</div>
+                    </motion.div>
+                ))
+                ) : (
+                <p className="text-gray-400 text-sm">No achievements available</p>
+                )}
             </div>
-          </motion.div>
+            </motion.div>
 
           {/* Quick Actions */}
           <motion.div
