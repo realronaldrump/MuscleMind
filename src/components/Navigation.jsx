@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Activity, BarChart3, Brain, Cube, Trophy, MessageSquare,
+  Activity, BarChart3, Brain, Cube3D, Trophy, MessageSquare,
   Calendar, TrendingUp, Settings, User, Menu, X, Zap,
   Target, Star, Upload, Bell, Search
 } from 'lucide-react';
@@ -44,7 +44,7 @@ const Navigation = () => {
     {
       path: '/3d-visualization',
       label: '3D Viz',
-      icon: Cube,
+      icon: Cube3D,
       description: 'Interactive 3D Analysis',
       color: 'from-orange-500 to-red-500'
     },
