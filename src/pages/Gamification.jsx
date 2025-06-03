@@ -13,22 +13,41 @@ import { useWorkout } from '../contexts/WorkoutContext';
 import { useGame } from '../contexts/GameContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'react-hot-toast';
-import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingSpinner from '../components/LoadingSpinner'; // Not used in this snippet, but kept for consistency
 
 const Gamification = () => {
   const { analytics } = useWorkout();
   const { 
-    level, xp, totalXP, achievements, activeChallenges, completedChallenges,
+    level, xp, totalXP, 
+    achievements: rawAchievements, // Renamed to avoid conflict and for clarity
+    activeChallenges: rawActiveChallenges, // Assuming this might be used later
+    completedChallenges: rawCompletedChallenges, // Renamed
     streaks, preferences, actions 
   } = useGame();
-  const { theme } = useTheme();
+  const { theme } = useTheme(); // theme is destructured but not used in the provided JSX.
+
+  // Ensure achievements, activeChallenges, and completedChallenges are always arrays
+  const achievements = Array.isArray(rawAchievements) ? rawAchievements : [];
+  const activeChallenges = Array.isArray(rawActiveChallenges) ? rawActiveChallenges : []; // Though mock data is used below
+  const completedChallenges = Array.isArray(rawCompletedChallenges) ? rawCompletedChallenges : [];
+
+
   const [selectedTab, setSelectedTab] = useState('achievements');
   const [showNewChallenge, setShowNewChallenge] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState(null);
 
-  // Calculate level progress
-  const levelProgress = actions.getProgressToNextLevel();
-  const xpToNext = actions.calculateXPToNextLevel();
+  // Calculate level progress - ensure actions object and its methods exist
+  const levelProgress = actions && typeof actions.getProgressToNextLevel === 'function' 
+    ? actions.getProgressToNextLevel() 
+    : 0;
+  const xpToNext = actions && typeof actions.calculateXPToNextLevel === 'function'
+    ? actions.calculateXPToNextLevel()
+    : 0;
+
+  // Ensure streaks is an object with expected properties
+  const currentStreak = streaks && typeof streaks.current === 'number' ? streaks.current : 0;
+  const longestStreak = streaks && typeof streaks.longest === 'number' ? streaks.longest : 0;
+
 
   // Achievement categories
   const achievementCategories = [
@@ -44,12 +63,12 @@ const Gamification = () => {
     { rank: 1, name: 'Alex Chen', level: 47, xp: 125000, avatar: '👨‍💼', badge: 'Elite' },
     { rank: 2, name: 'Sarah Kim', level: 42, xp: 98000, avatar: '👩‍🚀', badge: 'Pro' },
     { rank: 3, name: 'Mike Johnson', level: 38, xp: 87000, avatar: '🧔', badge: 'Expert' },
-    { rank: 4, name: 'You', level: level, xp: totalXP, avatar: '💪', badge: getLevelBadge(level) },
+    { rank: 4, name: 'You', level: level || 1, xp: totalXP || 0, avatar: '💪', badge: getLevelBadge(level || 1) }, // Added defaults for level and totalXP
     { rank: 5, name: 'Emma Davis', level: 32, xp: 65000, avatar: '👩‍🦳', badge: 'Advanced' }
   ];
 
-  // Active challenges data
-  const challengeTypes = [
+  // Active challenges data (currently mock, if using `activeChallenges` from hook, ensure it's an array)
+  const challengeTypes = [ // This is mock data, not using `activeChallenges` from the hook.
     {
       id: 'daily_volume',
       title: 'Daily Volume Challenge',
@@ -159,7 +178,7 @@ const Gamification = () => {
                     strokeWidth="8"
                     fill="none"
                     strokeDasharray={`${2 * Math.PI * 56}`}
-                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - levelProgress / 100)}`}
+                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - (levelProgress || 0) / 100)}`} // Added default for levelProgress
                     className="transition-all duration-1000"
                   />
                   <defs>
@@ -171,29 +190,30 @@ const Gamification = () => {
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
-                    <p className="text-3xl font-bold text-white">{level}</p>
+                    <p className="text-3xl font-bold text-white">{level || 1}</p> {/* Added default for level */}
                     <p className="text-xs text-purple-300">LEVEL</p>
                   </div>
                 </div>
               </div>
-              <p className="text-white font-semibold mb-1">Level {level}</p>
-              <p className="text-purple-300 text-sm">{xpToNext} XP to next level</p>
+              <p className="text-white font-semibold mb-1">Level {level || 1}</p> {/* Added default for level */}
+              <p className="text-purple-300 text-sm">{(xpToNext || 0).toLocaleString()} XP to next level</p> {/* Added default for xpToNext */}
             </div>
 
             {/* XP Stats */}
             <div className="text-center">
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="p-4 bg-white/5 rounded-xl">
-                  <p className="text-2xl font-bold text-yellow-400">{xp.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-yellow-400">{(xp || 0).toLocaleString()}</p> {/* Added default for xp */}
                   <p className="text-xs text-gray-400">Current XP</p>
                 </div>
                 <div className="p-4 bg-white/5 rounded-xl">
-                  <p className="text-2xl font-bold text-green-400">{totalXP.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-400">{(totalXP || 0).toLocaleString()}</p> {/* Added default for totalXP */}
                   <p className="text-xs text-gray-400">Total XP</p>
                 </div>
               </div>
               <div className="p-4 bg-white/5 rounded-xl">
-                <p className="text-2xl font-bold text-blue-400">{achievements.length}</p>
+                {/* achievements is now guaranteed to be an array */}
+                <p className="text-2xl font-bold text-blue-400">{achievements.length}</p> 
                 <p className="text-xs text-gray-400">Achievements Unlocked</p>
               </div>
             </div>
@@ -203,17 +223,17 @@ const Gamification = () => {
               <div className="mb-4">
                 <div className="flex items-center justify-center mb-2">
                   <Flame className="w-8 h-8 text-orange-400 mr-2" />
-                  <span className="text-3xl font-bold text-white">{streaks.current}</span>
+                  <span className="text-3xl font-bold text-white">{currentStreak}</span>
                 </div>
                 <p className="text-orange-300 text-sm">Current Streak</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-3 bg-white/5 rounded-lg">
-                  <p className="text-lg font-bold text-red-400">{streaks.longest}</p>
+                  <p className="text-lg font-bold text-red-400">{longestStreak}</p>
                   <p className="text-xs text-gray-400">Best Streak</p>
                 </div>
                 <div className="p-3 bg-white/5 rounded-lg">
-                  <p className="text-lg font-bold text-purple-400">{getLevelBadge(level)}</p>
+                  <p className="text-lg font-bold text-purple-400">{getLevelBadge(level || 1)}</p> {/* Added default for level */}
                   <p className="text-xs text-gray-400">Rank</p>
                 </div>
               </div>
@@ -272,9 +292,10 @@ const Gamification = () => {
 
               {/* Achievements Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* achievements is now guaranteed to be an array */}
                 {achievements.map((achievement, index) => (
                   <motion.div
-                    key={achievement.id}
+                    key={achievement.id || index} // Added fallback key if id is missing
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: index * 0.1 }}
@@ -288,7 +309,7 @@ const Gamification = () => {
                     } hover:border-purple-500/50`}
                   >
                     <div className="flex items-center justify-between mb-4">
-                      <div className="text-4xl">{achievement.icon}</div>
+                      <div className="text-4xl">{achievement.icon || '🏆'}</div> {/* Default icon */}
                       <div className="flex items-center space-x-2">
                         <div className={`px-2 py-1 rounded text-xs font-medium ${
                           achievement.rarity === 'legendary' ? 'bg-yellow-500 text-black' :
@@ -296,24 +317,28 @@ const Gamification = () => {
                           achievement.rarity === 'rare' ? 'bg-blue-500 text-white' :
                           'bg-gray-500 text-white'
                         }`}>
-                          {achievement.rarity}
+                          {achievement.rarity || 'common'} {/* Default rarity */}
                         </div>
-                        <span className="text-yellow-400 font-bold">+{achievement.xp}</span>
+                        <span className="text-yellow-400 font-bold">+{achievement.xp || 0}</span> {/* Default xp */}
                       </div>
                     </div>
                     
-                    <h3 className="text-lg font-bold text-white mb-2">{achievement.title}</h3>
-                    <p className="text-gray-400 text-sm mb-3">{achievement.description}</p>
+                    <h3 className="text-lg font-bold text-white mb-2">{achievement.title || 'Achievement'}</h3> {/* Default title */}
+                    <p className="text-gray-400 text-sm mb-3">{achievement.description || 'Unlock this achievement.'}</p> {/* Default description */}
                     
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <span>Unlocked</span>
-                      <span>{new Date(achievement.unlockedAt).toLocaleDateString()}</span>
+                      <span>{achievement.unlockedAt ? new Date(achievement.unlockedAt).toLocaleDateString() : 'N/A'}</span> {/* Handle missing date */}
                     </div>
                   </motion.div>
                 ))}
 
-                {/* Locked Achievements Preview */}
-                {[1, 2, 3].map((i) => (
+                {achievements.length === 0 && (
+                   <p className="text-gray-400 col-span-full text-center py-10">No achievements unlocked yet. Keep up the great work!</p>
+                )}
+
+                {/* Locked Achievements Preview (only show if there are fewer than 3 unlocked achievements to fill a row) */}
+                {Array.from({ length: Math.max(0, 3 - (achievements.length % 3)) % 3 }).map((_, i) => (
                   <motion.div
                     key={`locked-${i}`}
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -347,11 +372,11 @@ const Gamification = () => {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-6"
             >
-              {/* Active Challenges */}
+              {/* Active Challenges (using mock `challengeTypes`) */}
               <div>
                 <h2 className="text-2xl font-bold text-white mb-4">Active Challenges</h2>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {challengeTypes.map((challenge, index) => (
+                  {challengeTypes.map((challenge, index) => ( // Using mock data
                     <motion.div
                       key={challenge.id}
                       initial={{ opacity: 0, x: -20 }}
@@ -410,6 +435,9 @@ const Gamification = () => {
                       </div>
                     </motion.div>
                   ))}
+                   {challengeTypes.length === 0 && (
+                     <p className="text-gray-400 col-span-full text-center py-10">No active challenges right now. Check back soon!</p>
+                   )}
                 </div>
               </div>
 
@@ -417,9 +445,10 @@ const Gamification = () => {
               <div>
                 <h2 className="text-2xl font-bold text-white mb-4">Recently Completed</h2>
                 <div className="space-y-3">
+                  {/* completedChallenges is now guaranteed to be an array */}
                   {completedChallenges.slice(-3).map((challenge, index) => (
                     <motion.div
-                      key={challenge.id}
+                      key={challenge.id || index} // Added fallback key
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
@@ -428,13 +457,18 @@ const Gamification = () => {
                       <div className="flex items-center space-x-3">
                         <Trophy className="w-6 h-6 text-green-400" />
                         <div>
-                          <p className="text-white font-medium">{challenge.title}</p>
-                          <p className="text-gray-400 text-sm">Completed {challenge.completedAt}</p>
+                          <p className="text-white font-medium">{challenge.title || 'Challenge Completed'}</p> {/* Default title */}
+                          <p className="text-gray-400 text-sm">
+                            Completed {challenge.completedAt ? new Date(challenge.completedAt).toLocaleDateString() : 'recently'} {/* Handle missing date */}
+                          </p>
                         </div>
                       </div>
-                      <div className="text-green-400 font-bold">+{challenge.xp} XP</div>
+                      <div className="text-green-400 font-bold">+{challenge.xp || 0} XP</div> {/* Default xp */}
                     </motion.div>
                   ))}
+                  {completedChallenges.length === 0 && (
+                     <p className="text-gray-400 text-center py-5">No challenges completed yet. Go for it!</p>
+                   )}
                 </div>
               </div>
             </motion.div>
@@ -538,9 +572,9 @@ const Gamification = () => {
                 onClick={(e) => e.stopPropagation()}
                 className="bg-slate-800 border border-slate-700 rounded-3xl p-8 max-w-md w-full text-center"
               >
-                <div className="text-6xl mb-4">{selectedAchievement.icon}</div>
-                <h2 className="text-2xl font-bold text-white mb-2">{selectedAchievement.title}</h2>
-                <p className="text-gray-400 mb-4">{selectedAchievement.description}</p>
+                <div className="text-6xl mb-4">{selectedAchievement.icon || '🏆'}</div>
+                <h2 className="text-2xl font-bold text-white mb-2">{selectedAchievement.title || 'Achievement'}</h2>
+                <p className="text-gray-400 mb-4">{selectedAchievement.description || 'Details about this achievement.'}</p>
                 <div className="flex items-center justify-center space-x-4 mb-6">
                   <div className={`px-3 py-1 rounded text-sm font-medium ${
                     selectedAchievement.rarity === 'legendary' ? 'bg-yellow-500 text-black' :
@@ -548,13 +582,21 @@ const Gamification = () => {
                     selectedAchievement.rarity === 'rare' ? 'bg-blue-500 text-white' :
                     'bg-gray-500 text-white'
                   }`}>
-                    {selectedAchievement.rarity}
+                    {selectedAchievement.rarity || 'common'}
                   </div>
-                  <span className="text-yellow-400 font-bold">+{selectedAchievement.xp} XP</span>
+                  <span className="text-yellow-400 font-bold">+{selectedAchievement.xp || 0} XP</span>
                 </div>
                 <p className="text-gray-500 text-sm">
-                  Unlocked on {new Date(selectedAchievement.unlockedAt).toLocaleDateString()}
+                  Unlocked on {selectedAchievement.unlockedAt ? new Date(selectedAchievement.unlockedAt).toLocaleDateString() : 'N/A'}
                 </p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setSelectedAchievement(null)}
+                  className="mt-6 px-6 py-2 bg-purple-500 text-white rounded-lg"
+                >
+                  Close
+                </motion.button>
               </motion.div>
             </motion.div>
           )}
