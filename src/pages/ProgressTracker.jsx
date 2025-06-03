@@ -7,9 +7,14 @@ import { useGame } from '../contexts/GameContext';
 
 const ProgressTracker = () => {
   const { analytics } = useWorkout();
-  const { level, achievements } = useGame();
+  // Destructure achievements from useGame, and then ensure it's an array.
+  const { level, achievements: rawAchievements } = useGame(); // Renamed to rawAchievements to avoid confusion
+  
+  // Ensure achievements is always an array. If rawAchievements is not an array (e.g., undefined, null), default to an empty array.
+  const achievements = Array.isArray(rawAchievements) ? rawAchievements : [];
+
   const [selectedMetric, setSelectedMetric] = useState('strength');
-  const [timeRange, setTimeRange] = useState('3m');
+  const [timeRange, setTimeRange] = useState('3m'); // This state is declared but not currently used in the JSX.
 
   const metrics = [
     { id: 'strength', label: 'Strength', color: 'from-red-500 to-orange-500' },
@@ -52,6 +57,7 @@ const ProgressTracker = () => {
           {[
             { label: 'Days Active', value: '89', change: '+12', icon: Calendar },
             { label: 'Total Workouts', value: analytics?.totalWorkouts || '0', change: '+8', icon: TrendingUp },
+            // Now achievements.length is safe because achievements is guaranteed to be an array
             { label: 'Achievements', value: achievements.length, change: '+3', icon: Award },
             { label: 'Current Level', value: level, change: '+2', icon: Target }
           ].map((stat, index) => (
@@ -188,9 +194,13 @@ const ProgressTracker = () => {
                 className="relative group"
               >
                 <div className="aspect-[3/4] bg-slate-700 rounded-lg overflow-hidden">
+                  {/* Placeholder for actual image, using a div with an icon */}
                   <div className="w-full h-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
                     <Camera className="w-12 h-12 text-gray-400" />
                   </div>
+                  {/* If photo.url was real, you'd use an img tag: 
+                  <img src={photo.url} alt={photo.label} className="w-full h-full object-cover" /> 
+                  */}
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm p-2 rounded-b-lg">
                   <p className="text-white text-sm font-medium">{photo.label}</p>
@@ -203,7 +213,7 @@ const ProgressTracker = () => {
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.8 }}
+              transition={{ delay: 0.5 + progressPhotos.length * 0.1 }} // Adjusted delay
               className="aspect-[3/4] border-2 border-dashed border-slate-600 rounded-lg flex items-center justify-center hover:border-purple-500 transition-all cursor-pointer group"
             >
               <div className="text-center">
@@ -224,9 +234,10 @@ const ProgressTracker = () => {
           <h2 className="text-xl font-bold text-white mb-6">Recent Milestones</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Now achievements.slice is safe because achievements is guaranteed to be an array */}
             {achievements.slice(-6).map((achievement, index) => (
               <motion.div
-                key={achievement.id}
+                key={achievement.id} // Assuming achievement objects have an 'id' property
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 + index * 0.1 }}
@@ -241,6 +252,9 @@ const ProgressTracker = () => {
                 </div>
               </motion.div>
             ))}
+            {achievements.length === 0 && (
+              <p className="text-gray-400 col-span-full text-center">No milestones achieved yet. Keep going!</p>
+            )}
           </div>
         </motion.div>
       </div>
