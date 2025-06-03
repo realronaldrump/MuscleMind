@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text, Box, Sphere, Cylinder, Cone, Environment, PerspectiveCamera } from '@react-three/drei';
+import { OrbitControls, Text, Box, Sphere, Cylinder, Cone, Environment, PerspectiveCamera } from '@react-three/drei'; // Box from drei is fine
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Cube, RotateCcw, Maximize2, Download, Settings, Play, Pause,
-  ZoomIn, ZoomOut, RotateCw, Eye, EyeOff, Layers, Palette
+  Box as BoxIcon, // Changed from Cube and aliased
+  RotateCcw, Maximize2, Download, Settings, Play, Pause,
+  ZoomIn, ZoomOut, RotateCw, Eye, EyeOff, Layers, Palette,
+  CircleDot,    // Added for Sphere icon
+  TrendingUp    // Added for Progress Timeline icon
 } from 'lucide-react';
 import * as THREE from 'three';
 import { useWorkout } from '../contexts/WorkoutContext';
@@ -90,10 +93,10 @@ const ThreeDVisualization = () => {
   }, [analytics]);
 
   const visualizationTypes = [
-    { id: 'volume_bars', label: '3D Volume Bars', icon: Cube },
-    { id: 'muscle_spheres', label: 'Muscle Group Spheres', icon: Sphere },
-    { id: 'progress_timeline', label: 'Progress Timeline', icon: TrendingUp },
-    { id: 'strength_mountain', label: 'Strength Mountain', icon: Mountain }
+    { id: 'volume_bars', label: '3D Volume Bars', icon: BoxIcon },      // Changed Cube to BoxIcon
+    { id: 'muscle_spheres', label: 'Muscle Group Spheres', icon: CircleDot }, // Changed Sphere to CircleDot
+    { id: 'progress_timeline', label: 'Progress Timeline', icon: TrendingUp }, // Now correctly uses imported TrendingUp
+    { id: 'strength_mountain', label: 'Strength Mountain', icon: Mountain }   // Remains the same
   ];
 
   const colorSchemes = [
@@ -111,7 +114,7 @@ const ThreeDVisualization = () => {
     return (
       <div className="min-h-screen lg:ml-80 p-4 lg:p-8 flex items-center justify-center">
         <div className="text-center">
-          <Cube className="w-16 h-16 text-purple-500 mx-auto mb-4" />
+          <BoxIcon className="w-16 h-16 text-purple-500 mx-auto mb-4" /> {/* Changed Cube to BoxIcon */}
           <h2 className="text-2xl font-bold text-white mb-2">3D Visualization Unavailable</h2>
           <p className="text-gray-400">Upload your workout data to see interactive 3D charts.</p>
         </div>
@@ -372,7 +375,7 @@ const VolumeBarsBar = ({ bar, index, isAnimating, colorScheme }) => {
 
   return (
     <group position={bar.position}>
-      <Box
+      <Box // This correctly refers to Box from @react-three/drei
         ref={meshRef}
         args={[1, bar.height, 1]}
         position={[0, bar.height / 2, 0]}
@@ -432,7 +435,7 @@ const MuscleGroupSphere = ({ sphere, index, isAnimating, colorScheme }) => {
 
   return (
     <group position={sphere.position}>
-      <Sphere
+      <Sphere // This correctly refers to Sphere from @react-three/drei
         ref={meshRef}
         args={[sphere.radius, 32, 32]}
       >
@@ -475,7 +478,7 @@ const ProgressTimeline = ({ data, isAnimating, colorScheme }) => {
         <lineBasicMaterial color="#8b5cf6" linewidth={3} />
       </line>
       {data.map((point, index) => (
-        <Sphere
+        <Sphere // This correctly refers to Sphere from @react-three/drei
           key={index}
           position={point.position}
           args={[0.1, 16, 16]}
@@ -491,7 +494,7 @@ const StrengthMountain = ({ data, isAnimating, colorScheme }) => {
   return (
     <group>
       {data.map((peak, index) => (
-        <Cylinder
+        <Cylinder // This correctly refers to Cylinder from @react-three/drei
           key={peak.id}
           position={peak.position}
           args={[0.3, 0.5, peak.height, 8]}
