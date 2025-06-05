@@ -145,6 +145,33 @@ export const getExerciseHistory = (exerciseName, processedData) => {
         .sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
+/**
+ * NEW: Retrieves the max weight history for a specific exercise.
+ * @param {string} exerciseName - The name of the exercise.
+ * @param {Array<Object>} processedData - The cleaned and enriched workout data.
+ * @returns {Array<Object>} An array of { date, value } for charting.
+ */
+export const getExerciseMaxWeightHistory = (exerciseName, processedData) => {
+    if (!exerciseName || !processedData) return [];
+    return processedData
+        .filter(d => d['Exercise Name'] === exerciseName && d.weight > 0)
+        .map(d => ({
+            date: d.date.toISOString().split('T')[0],
+            value: Math.round(d.weight)
+        }))
+        // Consolidate to max weight per day
+        .reduce((acc, curr) => {
+            const existing = acc.find(item => item.date === curr.date);
+            if (existing) {
+                existing.value = Math.max(existing.value, curr.value);
+            } else {
+                acc.push(curr);
+            }
+            return acc;
+        }, [])
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+};
+
 
 // --- ADVANCED ANALYTICS ENGINE ---
 

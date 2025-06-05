@@ -6,7 +6,7 @@ import {
   ComposedChart, Area
 } from 'recharts';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { getExerciseHistory } from '../utils/dataProcessing';
+import { getExerciseHistory, getExerciseMaxWeightHistory } from '../utils/dataProcessing';
 import LoadingSpinner from '../components/LoadingSpinner';
 import DrillDownModal from '../components/DrillDownModal';
 
@@ -28,9 +28,12 @@ const Predictions = () => {
       .slice(0, 6);
   }, [predictions]);
 
-  const handleOpenStrengthModal = (prediction) => {
+  const handleOpenModal = (prediction) => {
+    if (!prediction) return;
+
     const timeframeData = prediction.timeframes.find(t => t.months === selectedTimeframe);
-    const history = getExerciseHistory(prediction.name, processedData);
+    const e1rmHistory = getExerciseHistory(prediction.name, processedData);
+    const maxWeightHistory = getExerciseMaxWeightHistory(prediction.name, processedData);
 
     setModalContent({
       icon: Zap,
@@ -47,14 +50,14 @@ const Predictions = () => {
         {
           subtitle: 'Your Historical E1RM',
           text: `Historical E1RM for ${prediction.name}:`,
-          chartData: history,
-          chartKey: 'e1rm'
+          chartData: e1rmHistory,
+          chartKey: 'value'
         },
         {
           subtitle: 'Your Max Weight History',
           text: `Historical max weight for ${prediction.name}:`,
-          chartData: history,
-          chartKey: 'maxWeight'
+          chartData: maxWeightHistory,
+          chartKey: 'value'
         },
         {
           subtitle: 'AI Recommendations',
@@ -163,7 +166,7 @@ const Predictions = () => {
                 const timeframeData = pred.timeframes.find(t => t.months === selectedTimeframe);
                 if (!timeframeData) return null;
                 return (
-                  <motion.div key={pred.name} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + index * 0.05 }} onClick={() => handleOpenStrengthModal(pred)} className="p-4 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:border-purple-500/50 transition-all group cursor-pointer">
+                  <motion.div key={pred.name} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + index * 0.05 }} onClick={() => handleOpenModal(pred)} className="p-4 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:border-purple-500/50 transition-all group cursor-pointer">
                     <div className="flex justify-between items-start">
                       <h3 className="font-semibold text-white text-sm truncate mb-3 pr-2">{pred.name}</h3>
                       <Info className="w-4 h-4 text-gray-500 group-hover:text-purple-400 transition-colors flex-shrink-0" />
