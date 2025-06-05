@@ -109,10 +109,11 @@ const ParticleBackground = () => {
         ctx.save();
         ctx.globalAlpha = particle.opacity;
         
-        // Create gradient for particle
+        // Create gradient for particle with safe radius values
+        const radius = Math.max(0.1, particle.size * 3); // Ensure minimum radius
         const gradient = ctx.createRadialGradient(
           particle.x, particle.y, 0,
-          particle.x, particle.y, particle.size * 3
+          particle.x, particle.y, radius
         );
         gradient.addColorStop(0, `hsla(${particle.hue}, 70%, 60%, 1)`);
         gradient.addColorStop(0.5, `hsla(${particle.hue}, 70%, 50%, 0.5)`);
@@ -120,7 +121,7 @@ const ParticleBackground = () => {
         
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.arc(particle.x, particle.y, Math.max(0.1, particle.size), 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       });

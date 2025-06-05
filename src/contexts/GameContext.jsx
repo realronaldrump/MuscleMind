@@ -561,23 +561,9 @@ export const GameProvider = ({ children }) => {
         </div>
       )}
       
-      <style jsx>{`
-        .confetti-container {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-        }
-        
-        .confetti-piece {
-          position: absolute;
-          width: 10px;
-          height: 10px;
-          animation: confetti-fall 3s linear infinite;
-        }
-        
-        @keyframes confetti-fall {
-          0% { transform: translateY(-100vh) rotate(0deg); }
+      <style>{`
+        @keyframes confetti {
+          0% { transform: translateY(0) rotate(0deg); }
           100% { transform: translateY(100vh) rotate(360deg); }
         }
       `}</style>

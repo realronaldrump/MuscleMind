@@ -13,16 +13,11 @@ const WorkoutContext = createContext();
 const ACTIONS = {
   SET_LOADING: 'SET_LOADING',
   SET_DATA: 'SET_DATA',
-  SET_ANALYTICS: 'SET_ANALYTICS',
-  SET_PREDICTIONS: 'SET_PREDICTIONS',
+  SET_ANALYTICS_AND_PREDICTIONS: 'SET_ANALYTICS_AND_PREDICTIONS',
   SET_USER_PROFILE: 'SET_USER_PROFILE',
-  ADD_ACHIEVEMENT: 'ADD_ACHIEVEMENT',
   UPDATE_SETTINGS: 'UPDATE_SETTINGS',
   SET_ERROR: 'SET_ERROR',
   CLEAR_ERROR: 'CLEAR_ERROR',
-  SET_FILTERS: 'SET_FILTERS',
-  ADD_WORKOUT: 'ADD_WORKOUT',
-  UPDATE_GOALS: 'UPDATE_GOALS'
 };
 
 // Initial state
@@ -34,36 +29,16 @@ const initialState = {
   loading: false,
   error: null,
   userProfile: {
-    name: '',
-    age: null,
-    weight: null,
-    height: null,
-    experience: 'beginner',
-    goals: ['muscle_gain'],
-    preferences: {
-      units: 'imperial',
-      theme: 'dark',
-      notifications: true,
-      privacy: 'private'
-    }
+    name: 'Fitness Enthusiast',
+    age: 30,
+    weight: 180,
+    height: 70,
+    experience: 'intermediate',
+    goals: ['muscle_gain', 'strength'],
   },
-  achievements: [],
   settings: {
     autoSave: true,
-    dataRetention: 90,
-    analyticsLevel: 'advanced',
-    shareData: false
   },
-  filters: {
-    dateRange: null,
-    exercises: [],
-    muscleGroups: []
-  },
-  goals: {
-    strength: {},
-    volume: {},
-    consistency: {}
-  }
 };
 
 // Reducer function
@@ -75,25 +50,21 @@ const workoutReducer = (state, action) => {
     case ACTIONS.SET_DATA:
       return { 
         ...state, 
-        rawData: action.payload, 
-        processedData: processWorkoutData(action.payload),
+        rawData: action.payload.rawData,
+        processedData: action.payload.processedData,
         loading: false 
       };
     
-    case ACTIONS.SET_ANALYTICS:
-      return { ...state, analytics: action.payload };
-    
-    case ACTIONS.SET_PREDICTIONS:
-      return { ...state, predictions: action.payload };
+    case ACTIONS.SET_ANALYTICS_AND_PREDICTIONS:
+      return { 
+        ...state, 
+        analytics: action.payload.analytics,
+        predictions: action.payload.predictions,
+        loading: false 
+      };
     
     case ACTIONS.SET_USER_PROFILE:
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
-    
-    case ACTIONS.ADD_ACHIEVEMENT:
-      return { 
-        ...state, 
-        achievements: [...state.achievements, action.payload] 
-      };
     
     case ACTIONS.UPDATE_SETTINGS:
       return { 
@@ -106,19 +77,6 @@ const workoutReducer = (state, action) => {
     
     case ACTIONS.CLEAR_ERROR:
       return { ...state, error: null };
-    
-    case ACTIONS.SET_FILTERS:
-      return { ...state, filters: { ...state.filters, ...action.payload } };
-    
-    case ACTIONS.ADD_WORKOUT:
-      return { 
-        ...state, 
-        rawData: [...state.rawData, ...action.payload],
-        processedData: processWorkoutData([...state.rawData, ...action.payload])
-      };
-    
-    case ACTIONS.UPDATE_GOALS:
-      return { ...state, goals: { ...state.goals, ...action.payload } };
     
     default:
       return state;
@@ -134,27 +92,15 @@ export const WorkoutProvider = ({ children }) => {
     try {
       const savedData = localStorage.getItem('musclemind_data');
       const savedProfile = localStorage.getItem('musclemind_profile');
-      const savedSettings = localStorage.getItem('musclemind_settings');
-      const savedAchievements = localStorage.getItem('musclemind_achievements');
       
       if (savedData) {
         const data = JSON.parse(savedData);
-        dispatch({ type: ACTIONS.SET_DATA, payload: data });
+        const processedData = processWorkoutData(data);
+        dispatch({ type: ACTIONS.SET_DATA, payload: { rawData: data, processedData } });
       }
       
       if (savedProfile) {
         dispatch({ type: ACTIONS.SET_USER_PROFILE, payload: JSON.parse(savedProfile) });
-      }
-      
-      if (savedSettings) {
-        dispatch({ type: ACTIONS.UPDATE_SETTINGS, payload: JSON.parse(savedSettings) });
-      }
-      
-      if (savedAchievements) {
-        const achievements = JSON.parse(savedAchievements);
-        achievements.forEach(achievement => {
-          dispatch({ type: ACTIONS.ADD_ACHIEVEMENT, payload: achievement });
-        });
       }
     } catch (error) {
       console.error('Error loading saved data:', error);
@@ -174,31 +120,22 @@ export const WorkoutProvider = ({ children }) => {
     localStorage.setItem('musclemind_profile', JSON.stringify(state.userProfile));
   }, [state.userProfile]);
 
-  // Save settings
-  useEffect(() => {
-    localStorage.setItem('musclemind_settings', JSON.stringify(state.settings));
-  }, [state.settings]);
-
-  // Save achievements
-  useEffect(() => {
-    localStorage.setItem('musclemind_achievements', JSON.stringify(state.achievements));
-  }, [state.achievements]);
-
-  // Process analytics when data changes
+  // Process analytics and predictions when data or profile changes
   useEffect(() => {
     if (state.processedData.length > 0) {
+      dispatch({ type: ACTIONS.SET_LOADING, payload: true });
       try {
         const analytics = calculateAdvancedMetrics(state.processedData, state.userProfile);
-        dispatch({ type: ACTIONS.SET_ANALYTICS, payload: analytics });
+        const predictions = generatePredictions(analytics, state.userProfile);
         
-        const predictions = generatePredictions(state.processedData, analytics, state.userProfile);
-        dispatch({ type: ACTIONS.SET_PREDICTIONS, payload: predictions });
-        
-        // Check for new achievements
-        checkAchievements(analytics, state.achievements);
+        dispatch({ 
+          type: ACTIONS.SET_ANALYTICS_AND_PREDICTIONS, 
+          payload: { analytics, predictions }
+        });
       } catch (error) {
         console.error('Error processing analytics:', error);
         dispatch({ type: ACTIONS.SET_ERROR, payload: 'Error processing workout data' });
+        toast.error('Failed to analyze data.');
       }
     }
   }, [state.processedData, state.userProfile]);
@@ -220,8 +157,9 @@ export const WorkoutProvider = ({ children }) => {
             throw new Error('CSV parsing error: ' + results.errors[0].message);
           }
           
-          dispatch({ type: ACTIONS.SET_DATA, payload: results.data });
-          toast.success(`Successfully loaded ${results.data.length} workout records!`);
+          const processedData = processWorkoutData(results.data);
+          dispatch({ type: ACTIONS.SET_DATA, payload: { rawData: results.data, processedData } });
+          toast.success(`Successfully loaded ${results.data.length} records!`);
         },
         error: (error) => {
           throw new Error('Failed to parse CSV: ' + error.message);
@@ -243,24 +181,10 @@ export const WorkoutProvider = ({ children }) => {
     toast.success('Settings updated!');
   };
 
-  const addWorkout = (workoutData) => {
-    dispatch({ type: ACTIONS.ADD_WORKOUT, payload: workoutData });
-    toast.success('Workout added successfully!');
-  };
-
-  const setFilters = (filters) => {
-    dispatch({ type: ACTIONS.SET_FILTERS, payload: filters });
-  };
-
-  const updateGoals = (goals) => {
-    dispatch({ type: ACTIONS.UPDATE_GOALS, payload: goals });
-    toast.success('Goals updated!');
-  };
-
   const clearData = () => {
     localStorage.removeItem('musclemind_data');
-    localStorage.removeItem('musclemind_analytics');
-    dispatch({ type: ACTIONS.SET_DATA, payload: [] });
+    dispatch({ type: ACTIONS.SET_DATA, payload: { rawData: [], processedData: [] } });
+    dispatch({ type: ACTIONS.SET_ANALYTICS_AND_PREDICTIONS, payload: { analytics: null, predictions: null } });
     toast.success('Data cleared successfully!');
   };
 
@@ -269,7 +193,6 @@ export const WorkoutProvider = ({ children }) => {
       const exportData = {
         userData: state.rawData,
         profile: state.userProfile,
-        achievements: state.achievements,
         settings: state.settings,
         exportDate: new Date().toISOString()
       };
@@ -288,51 +211,12 @@ export const WorkoutProvider = ({ children }) => {
     }
   };
 
-  const checkAchievements = (analytics, currentAchievements) => {
-    if (!analytics) return;
-    
-    const achievements = [];
-    const achievementIds = new Set(currentAchievements.map(a => a.id));
-    
-    // Check various achievement conditions
-    if (analytics.totalWorkouts >= 10 && !achievementIds.has('first_ten')) {
-      achievements.push({
-        id: 'first_ten',
-        title: 'Getting Started',
-        description: 'Completed 10 workouts',
-        type: 'milestone',
-        date: new Date().toISOString(),
-        rarity: 'common'
-      });
-    }
-    
-    if (analytics.totalVolume >= 100000 && !achievementIds.has('volume_milestone')) {
-      achievements.push({
-        id: 'volume_milestone',
-        title: 'Volume Beast',
-        description: 'Reached 100K lbs total volume',
-        type: 'milestone',
-        date: new Date().toISOString(),
-        rarity: 'rare'
-      });
-    }
-    
-    // Add achievements
-    achievements.forEach(achievement => {
-      dispatch({ type: ACTIONS.ADD_ACHIEVEMENT, payload: achievement });
-      toast.success(`🏆 Achievement Unlocked: ${achievement.title}!`);
-    });
-  };
-
   const value = {
     ...state,
     actions: {
       uploadWorkoutData,
       updateUserProfile,
       updateSettings,
-      addWorkout,
-      setFilters,
-      updateGoals,
       clearData,
       exportData
     }

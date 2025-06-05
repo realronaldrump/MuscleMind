@@ -1,125 +1,124 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Brain, TrendingUp, Target, Calendar, Zap, AlertTriangle,
-  Clock, Trophy, Activity, BarChart3, Settings, Sparkles,
-  ChevronRight, Play, Pause, RotateCcw, Eye, Download
-} from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { Zap, HeartPulse, GitBranch, Info, Brain } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, ComposedChart, Bar, ScatterChart, Scatter,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  ComposedChart, Area
 } from 'recharts';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { useTheme } from '../contexts/ThemeContext';
-import { toast } from 'react-hot-toast';
+import { getExerciseHistory } from '../utils/dataProcessing';
 import LoadingSpinner from '../components/LoadingSpinner';
+import DrillDownModal from '../components/DrillDownModal';
 
 const Predictions = () => {
-  const { analytics, predictions, rawData, loading } = useWorkout();
-  const { theme } = useTheme();
-  const [selectedTimeframe, setSelectedTimeframe] = useState('3m');
-  const [selectedMetric, setSelectedMetric] = useState('strength');
-  const [confidenceLevel, setConfidenceLevel] = useState(85);
-  const [showSettings, setShowSettings] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulationProgress, setSimulationProgress] = useState(0);
-
-  // Generate prediction data based on current analytics
-  const predictionData = useMemo(() => {
-    if (!analytics) return {};
-
-    const currentDate = new Date();
-    const timeframes = {
-      '1m': 1,
-      '3m': 3,
-      '6m': 6,
-      '12m': 12,
-      '24m': 24
-    };
-
-    const monthsAhead = timeframes[selectedTimeframe];
-    
-    // Generate strength predictions
-    const strengthPredictions = Object.entries(analytics.exerciseStats || {})
-      .slice(0, 8)
-      .map(([exercise, stats]) => {
-        const currentMax = stats.maxWeight || 0;
-        const progressionRate = stats.progressionRate || 0;
-        
-        // Apply diminishing returns and plateau factors
-        const plateauFactor = Math.max(0.1, 1 - (monthsAhead * 0.05));
-        const projectedGain = (progressionRate * 4.33 * monthsAhead) * plateauFactor;
-        
-        return {
-          exercise: exercise.substring(0, 20),
-          current: currentMax,
-          predicted: Math.round(currentMax + projectedGain),
-          confidence: Math.max(60, 95 - monthsAhead * 3),
-          gain: Math.round(projectedGain),
-          percentageGain: currentMax > 0 ? ((projectedGain / currentMax) * 100).toFixed(1) : 0
-        };
-      });
-
-    // Generate volume predictions
-    const currentWeeklyVolume = analytics.weeklyTrends?.length > 0 
-      ? analytics.weeklyTrends[analytics.weeklyTrends.length - 1].volume 
-      : 0;
-    
-    const volumeGrowthRate = 0.02; // 2% per month
-    const predictedVolume = currentWeeklyVolume * Math.pow(1 + volumeGrowthRate, monthsAhead);
-
-    // Generate body composition estimates
-    const bodyComposition = generateBodyCompositionPredictions(monthsAhead, analytics);
-
-    // Generate performance milestones
-    const milestones = generatePerformanceMilestones(strengthPredictions, monthsAhead);
-
-    // Generate risk factors
-    const riskFactors = generateRiskFactors(analytics, monthsAhead);
-
-    return {
-      strengthPredictions,
-      volumePrediction: {
-        current: currentWeeklyVolume,
-        predicted: Math.round(predictedVolume),
-        gain: Math.round(predictedVolume - currentWeeklyVolume),
-        confidence: Math.max(70, 90 - monthsAhead * 2)
-      },
-      bodyComposition,
-      milestones,
-      riskFactors,
-      timeline: generatePredictionTimeline(monthsAhead, strengthPredictions)
-    };
-  }, [analytics, selectedTimeframe, confidenceLevel]);
+  const { predictions, loading, analytics, processedData } = useWorkout();
+  const [selectedTimeframe, setSelectedTimeframe] = useState(3);
+  const [modalContent, setModalContent] = useState(null);
 
   const timeframes = [
-    { id: '1m', label: '1 Month', confidence: 95 },
-    { id: '3m', label: '3 Months', confidence: 87 },
-    { id: '6m', label: '6 Months', confidence: 78 },
-    { id: '12m', label: '1 Year', confidence: 65 },
-    { id: '24m', label: '2 Years', confidence: 45 }
+    { months: 3, label: '3 Months' },
+    { months: 6, label: '6 Months' },
+    { months: 12, label: '1 Year' },
   ];
 
-  const runSimulation = async () => {
-    setIsSimulating(true);
-    setSimulationProgress(0);
+  const topStrengthPredictions = useMemo(() => {
+    if (!predictions?.strengthProjections) return [];
+    return Object.values(predictions.strengthProjections)
+      .sort((a, b) => b.currentE1RM - a.currentE1RM)
+      .slice(0, 6);
+  }, [predictions]);
 
-    // Simulate AI processing
-    for (let i = 0; i <= 100; i += 5) {
-      await new Promise(resolve => setTimeout(resolve, 50));
-      setSimulationProgress(i);
-    }
+  const handleOpenStrengthModal = (prediction) => {
+    const timeframeData = prediction.timeframes.find(t => t.months === selectedTimeframe);
+    const history = getExerciseHistory(prediction.name, processedData);
 
-    setIsSimulating(false);
-    toast.success('AI simulation complete! Updated predictions based on latest data.');
+    setModalContent({
+      icon: Zap,
+      title: `Projection: ${prediction.name}`,
+      sections: [
+        {
+          subtitle: 'What it means',
+          text: `This card predicts your future strength for the ${prediction.name}, measured in Estimated 1-Rep Max (E1RM). E1RM is the maximum weight you could likely lift for a single repetition.`
+        },
+        {
+          subtitle: 'How it was calculated',
+          text: `1. We analyzed your historical performance for this exercise to find your statistical trend.\n2. Your weekly E1RM gain is calculated to be ~${prediction.progression.weeklyE1RMGain.toFixed(1)} lbs (with ${Math.round(prediction.progression.confidence * 100)}% confidence).\n3. We project this trend forward, applying a diminishing returns factor of ${prediction.diminishingFactor.toFixed(2)}x to account for the fact that gains slow down over time.\n4. The "Range" is a 95% confidence interval based on the consistency of your past progression.`
+        },
+        {
+          subtitle: 'Your Historical E1RM',
+          text: `Historical E1RM for ${prediction.name}:`,
+          chartData: history,
+          chartKey: 'e1rm'
+        },
+        {
+          subtitle: 'Your Max Weight History',
+          text: `Historical max weight for ${prediction.name}:`,
+          chartData: history,
+          chartKey: 'maxWeight'
+        },
+        {
+          subtitle: 'AI Recommendations',
+          text: `• To beat this projection, focus on consistent overload. Try increasing weight by 2-5% when you can complete all sets and reps with good form.\n• Consider varying your rep ranges (e.g., 3-5 for strength, 8-12 for hypertrophy) to break through plateaus.\n• Ensure you're getting adequate rest for the ${prediction.progression.muscleGroup} muscle group.`
+        }
+      ]
+    });
+  };
+
+  const handleOpenHypertrophyModal = () => {
+    const { hypertrophyPotential } = predictions;
+    setModalContent({
+      icon: HeartPulse,
+      title: 'Hypertrophy Potential Analysis',
+      sections: [
+        {
+          subtitle: 'What it means',
+          text: 'This score estimates how effective your current training is for stimulating muscle growth (hypertrophy). It combines key scientific principles: volume, progressive overload, and muscle balance.'
+        },
+        {
+          subtitle: 'How it was calculated',
+          component: (
+            <div className="space-y-2 text-sm text-gray-300">
+              <p>• <b className="text-white">Volume ({hypertrophyPotential.scores.volume}/100):</b> Based on your average weekly volume of ${hypertrophyPotential.details.avgWeeklyVolume.toLocaleString()} lbs, compared to optimal ranges from research.</p>
+              <p>• <b className="text-white">Progression ({hypertrophyPotential.scores.progression}/100):</b> Measures if your volume is consistently increasing over time. Your current trend is a change of ${hypertrophyPotential.details.volumeTrend} lbs/week.</p>
+              <p>• <b className="text-white">Balance ({hypertrophyPotential.scores.balance}/100):</b> Analyzes the distribution of volume across all muscle groups to ensure balanced development and reduce injury risk.</p>
+            </div>
+          )
+        },
+        {
+          subtitle: 'AI Recommendations',
+          text: hypertrophyPotential.recommendations.map(r => `• ${r}`).join('\n')
+        }
+      ]
+    });
+  };
+
+  const handleOpenReadinessModal = () => {
+    const lastState = analytics.fitnessFatigue[analytics.fitnessFatigue.length - 1];
+    setModalContent({
+      icon: GitBranch,
+      title: 'Readiness & Fatigue Model',
+      sections: [
+        {
+          subtitle: 'What it means',
+          text: 'This model visualizes the balance between your fitness and fatigue.\n\n• Fitness (CTL): Your long-term, accumulated fitness (42-day average).\n• Fatigue (ATL): Your short-term fatigue from recent workouts (7-day average).\n• Readiness (TSB): The key metric. It\'s your Fitness minus Fatigue. A positive value means you\'re fresh; a negative value means you\'re fatigued.'
+        },
+        {
+          subtitle: 'How it was calculated',
+          text: `Each workout generates a Training Stress Score (TSS). These scores are used in an exponentially-weighted moving average to calculate your Fitness and Fatigue over time. Your current values are:\n\n• Fitness (CTL): ${lastState.ctl.toFixed(1)}\n• Fatigue (ATL): ${lastState.atl.toFixed(1)}\n• Readiness (TSB): ${lastState.tsb.toFixed(1)}`
+        },
+        {
+          subtitle: 'AI Recommendations',
+          text: '• Aim for peak performance when Readiness (blue line) is positive and rising.\n• Plan recovery or deload weeks when Fatigue (red line) is significantly higher than Fitness (purple line).\n• A steady, long-term rise in your Fitness line is the primary goal for consistent progress.'
+        }
+      ]
+    });
   };
 
   if (loading) {
-    return <LoadingSpinner message="Generating AI predictions..." />;
+    return <LoadingSpinner message="Recalibrating neural pathways..." />;
   }
 
-  if (!analytics) {
+  if (!predictions || !analytics) {
     return (
       <div className="min-h-screen lg:ml-80 p-4 lg:p-8 flex items-center justify-center">
         <div className="text-center">
@@ -132,465 +131,80 @@ const Predictions = () => {
   }
 
   return (
-    <div className="min-h-screen lg:ml-80 p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col lg:flex-row lg:items-center lg:justify-between"
-        >
-          <div>
+    <>
+      <DrillDownModal isOpen={!!modalContent} onClose={() => setModalContent(null)} content={modalContent} />
+      <div className="min-h-screen lg:ml-80 p-4 lg:p-8">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Header */}
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
             <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent mb-2">
-              AI Predictions
+              AI Projections
             </h1>
             <p className="text-gray-400">
-              Advanced machine learning predictions for your fitness journey
+              Your fitness future, calculated from your unique training data.
             </p>
-          </div>
-          
-          <div className="flex items-center space-x-4 mt-4 lg:mt-0">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={runSimulation}
-              disabled={isSimulating}
-              className="flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
-            >
-              {isSimulating ? (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-                  Simulating...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Run AI Simulation
-                </>
-              )}
-            </motion.button>
-            
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowSettings(!showSettings)}
-              className="flex items-center px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-gray-400 hover:text-white transition-all"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
-            </motion.button>
-          </div>
-        </motion.div>
+          </motion.div>
 
-        {/* AI Status & Simulation Progress */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-6 bg-gradient-to-r from-purple-900/20 via-blue-900/20 to-purple-900/20 backdrop-blur-xl border border-purple-500/20 rounded-3xl"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <div className="relative">
-                <Brain className="w-8 h-8 text-purple-400" />
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Neural Network Status</h2>
-                <p className="text-purple-300 text-sm">
-                  {isSimulating ? 'Processing predictions...' : 'AI ready - Last updated 2 minutes ago'}
-                </p>
-              </div>
-            </div>
-            
-            <div className="text-right">
-              <p className="text-2xl font-bold text-green-400">
-                {timeframes.find(t => t.id === selectedTimeframe)?.confidence || 85}%
-              </p>
-              <p className="text-xs text-gray-400">Confidence Level</p>
-            </div>
-          </div>
-
-          {isSimulating && (
-            <div className="mt-4">
-              <div className="flex justify-between text-sm text-gray-400 mb-2">
-                <span>AI Processing...</span>
-                <span>{simulationProgress}%</span>
-              </div>
-              <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
-                  style={{ width: `${simulationProgress}%` }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>
-            </div>
-          )}
-        </motion.div>
-
-        {/* Timeframe Selector */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex flex-wrap gap-4"
-        >
-          {timeframes.map((timeframe) => (
-            <motion.button
-              key={timeframe.id}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedTimeframe(timeframe.id)}
-              className={`px-6 py-3 rounded-xl transition-all ${
-                selectedTimeframe === timeframe.id
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                  : 'bg-slate-800/50 border border-slate-700/50 text-gray-400 hover:text-white hover:border-purple-500/30'
-              }`}
-            >
-              <div className="text-center">
+          {/* Timeframe Selector */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-wrap gap-4">
+            {timeframes.map((timeframe) => (
+              <motion.button key={timeframe.months} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setSelectedTimeframe(timeframe.months)} className={`px-6 py-3 rounded-xl transition-all ${selectedTimeframe === timeframe.months ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : 'bg-slate-800/50 border border-slate-700/50 text-gray-400 hover:text-white hover:border-purple-500/30'}`}>
                 <p className="font-semibold">{timeframe.label}</p>
-                <p className="text-xs opacity-80">{timeframe.confidence}% confidence</p>
-              </div>
-            </motion.button>
-          ))}
-        </motion.div>
-
-        {/* Strength Predictions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Strength Projections</h2>
-              <p className="text-gray-400">
-                AI-predicted strength gains for the next {timeframes.find(t => t.id === selectedTimeframe)?.label.toLowerCase()}
-              </p>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Zap className="w-5 h-5 text-yellow-400" />
-              <span className="text-yellow-400 font-medium">High Accuracy</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {predictionData.strengthPredictions?.map((prediction, index) => (
-              <motion.div
-                key={prediction.exercise}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 + index * 0.1 }}
-                className="p-4 bg-gradient-to-br from-slate-700/50 to-slate-800/50 border border-slate-600/50 rounded-xl hover:border-purple-500/30 transition-all group"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-white text-sm">{prediction.exercise}</h3>
-                  <div className="flex items-center space-x-1">
-                    <div className={`w-2 h-2 rounded-full ${
-                      prediction.confidence > 80 ? 'bg-green-500' :
-                      prediction.confidence > 60 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-gray-400">{prediction.confidence}%</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 text-sm">Current</span>
-                    <span className="text-white font-semibold">{prediction.current} lbs</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 text-sm">Predicted</span>
-                    <span className="text-green-400 font-bold">{prediction.predicted} lbs</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400 text-sm">Gain</span>
-                    <span className="text-purple-400 font-semibold">
-                      +{prediction.gain} lbs ({prediction.percentageGain}%)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-3 bg-slate-800/50 rounded-full h-2 overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-purple-500 to-green-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, (prediction.gain / prediction.current) * 100 * 5)}%` }}
-                    transition={{ delay: 0.5 + index * 0.1, duration: 1 }}
-                  />
-                </div>
-              </motion.div>
+              </motion.button>
             ))}
-          </div>
-        </motion.div>
-
-        {/* Prediction Timeline & Milestones */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Timeline */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl"
-          >
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-              <Calendar className="w-6 h-6 text-blue-400 mr-2" />
-              Prediction Timeline
-            </h3>
-
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={predictionData.timeline || []}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="month" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1f2937', 
-                    border: '1px solid #374151',
-                    borderRadius: '8px',
-                    color: '#ffffff'
-                  }} 
-                />
-                <defs>
-                  <linearGradient id="predictionGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#8b5cf6"
-                  fill="url(#predictionGradient)"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="current"
-                  stroke="#06b6d4"
-                  strokeWidth={3}
-                  dot={{ fill: '#06b6d4', strokeWidth: 2, r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
           </motion.div>
 
-          {/* Performance Milestones */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 }}
-            className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl"
-          >
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-              <Trophy className="w-6 h-6 text-yellow-400 mr-2" />
-              Predicted Milestones
-            </h3>
-
-            <div className="space-y-4">
-              {predictionData.milestones?.map((milestone, index) => (
-                <motion.div
-                  key={milestone.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 + index * 0.1 }}
-                  className="flex items-center p-4 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-xl"
-                >
-                  <div className="text-2xl mr-4">{milestone.icon}</div>
-                  <div className="flex-1">
-                    <h4 className="text-white font-semibold">{milestone.title}</h4>
-                    <p className="text-gray-400 text-sm">{milestone.description}</p>
-                    <p className="text-yellow-400 text-xs">
-                      Expected: {milestone.expectedDate}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white font-bold">{milestone.value}</p>
-                    <p className="text-gray-400 text-xs">{milestone.confidence}% likely</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Risk Factors & Recommendations */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl"
-        >
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-            <AlertTriangle className="w-6 h-6 text-orange-400 mr-2" />
-            Risk Assessment & Recommendations
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="text-lg font-semibold text-white mb-3">Potential Risk Factors</h4>
-              <div className="space-y-3">
-                {predictionData.riskFactors?.map((risk, index) => (
-                  <div
-                    key={risk.id}
-                    className={`p-3 rounded-lg border ${
-                      risk.level === 'high' ? 'bg-red-500/10 border-red-500/30' :
-                      risk.level === 'medium' ? 'bg-yellow-500/10 border-yellow-500/30' :
-                      'bg-green-500/10 border-green-500/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-white font-medium">{risk.factor}</span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        risk.level === 'high' ? 'bg-red-500 text-white' :
-                        risk.level === 'medium' ? 'bg-yellow-500 text-black' :
-                        'bg-green-500 text-white'
-                      }`}>
-                        {risk.level}
-                      </span>
+          {/* Strength Predictions */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl">
+            <h2 className="text-2xl font-bold text-white mb-2 flex items-center"><Zap className="w-6 h-6 text-yellow-400 mr-3" />Strength Projections</h2>
+            <p className="text-gray-400 mb-6">Predicted Estimated 1-Rep Max (E1RM) in {selectedTimeframe} months.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {topStrengthPredictions.map((pred, index) => {
+                const timeframeData = pred.timeframes.find(t => t.months === selectedTimeframe);
+                if (!timeframeData) return null;
+                return (
+                  <motion.div key={pred.name} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + index * 0.05 }} onClick={() => handleOpenStrengthModal(pred)} className="p-4 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:border-purple-500/50 transition-all group cursor-pointer">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-semibold text-white text-sm truncate mb-3 pr-2">{pred.name}</h3>
+                      <Info className="w-4 h-4 text-gray-500 group-hover:text-purple-400 transition-colors flex-shrink-0" />
                     </div>
-                    <p className="text-gray-400 text-sm mt-1">{risk.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-lg font-semibold text-white mb-3">AI Recommendations</h4>
-              <div className="space-y-3">
-                {[
-                  {
-                    title: 'Progressive Overload',
-                    description: 'Increase weight by 2.5% weekly for optimal gains',
-                    priority: 'high'
-                  },
-                  {
-                    title: 'Recovery Optimization',
-                    description: 'Maintain 48-72 hour rest between muscle groups',
-                    priority: 'medium'
-                  },
-                  {
-                    title: 'Volume Periodization',
-                    description: 'Plan deload week every 4-6 weeks',
-                    priority: 'medium'
-                  }
-                ].map((rec, index) => (
-                  <motion.div
-                    key={rec.title}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.7 + index * 0.1 }}
-                    className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-white font-medium">{rec.title}</span>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        rec.priority === 'high' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
-                      }`}>
-                        {rec.priority}
-                      </span>
-                    </div>
-                    <p className="text-gray-400 text-sm mt-1">{rec.description}</p>
+                    <div className="flex justify-between items-center text-sm mb-1"><span className="text-gray-400">Current</span><span className="text-white font-semibold">{pred.currentE1RM} lbs</span></div>
+                    <div className="flex justify-between items-center text-sm"><span className="text-purple-400">Predicted</span><span className="text-purple-400 font-bold">{timeframeData.predictedE1RM} lbs</span></div>
+                    <div className="w-full bg-slate-700/50 rounded-full h-2 mt-3"><div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full" style={{ width: `${(pred.currentE1RM / timeframeData.predictedE1RM) * 100}%` }}></div></div>
                   </motion.div>
-                ))}
-              </div>
+                );
+              })}
             </div>
+          </motion.div>
+
+          {/* Hypertrophy & Readiness */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} onClick={handleOpenHypertrophyModal} className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl group cursor-pointer hover:border-red-500/50 transition-colors">
+              <div className="flex justify-between items-start"><h3 className="text-xl font-bold text-white mb-4 flex items-center"><HeartPulse className="w-6 h-6 text-red-400 mr-2" />Hypertrophy Potential</h3><Info className="w-5 h-5 text-gray-500 group-hover:text-red-400 transition-colors" /></div>
+              <div className="text-center mb-4"><div className="text-5xl font-bold text-red-400">{predictions.hypertrophyPotential.overallScore}<span className="text-3xl text-gray-400">/100</span></div><p className="text-gray-400 text-sm">Your current training effectiveness for muscle growth.</p></div>
+              <div className="space-y-3"><div className="flex justify-between text-sm mb-1"><span className="capitalize text-gray-300">Volume</span><span className="text-white">{predictions.hypertrophyPotential.scores.volume}/100</span></div><div className="w-full bg-slate-700 rounded-full h-2"><div className="bg-red-500 h-2 rounded-full" style={{width: `${predictions.hypertrophyPotential.scores.volume}%`}}></div></div><div className="flex justify-between text-sm mb-1"><span className="capitalize text-gray-300">Progression</span><span className="text-white">{predictions.hypertrophyPotential.scores.progression}/100</span></div><div className="w-full bg-slate-700 rounded-full h-2"><div className="bg-red-500 h-2 rounded-full" style={{width: `${predictions.hypertrophyPotential.scores.progression}%`}}></div></div><div className="flex justify-between text-sm mb-1"><span className="capitalize text-gray-300">Balance</span><span className="text-white">{predictions.hypertrophyPotential.scores.balance}/100</span></div><div className="w-full bg-slate-700 rounded-full h-2"><div className="bg-red-500 h-2 rounded-full" style={{width: `${predictions.hypertrophyPotential.scores.balance}%`}}></div></div></div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} onClick={handleOpenReadinessModal} className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl group cursor-pointer hover:border-blue-500/50 transition-colors">
+              <div className="flex justify-between items-start"><h3 className="text-xl font-bold text-white mb-4 flex items-center"><GitBranch className="w-6 h-6 text-blue-400 mr-2" />Projected Readiness</h3><Info className="w-5 h-5 text-gray-500 group-hover:text-blue-400 transition-colors" /></div>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={predictions.futureReadiness}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="day" stroke="#9ca3af" fontSize={12} label={{ value: 'Days from now', position: 'insideBottom', offset: -5, fill: '#9ca3af' }} />
+                  <YAxis stroke="#9ca3af" fontSize={12} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#ffffff' }} />
+                  <defs><linearGradient id="tsbFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient></defs>
+                  <Line type="monotone" dataKey="ctl" stroke="#8b5cf6" strokeWidth={2} name="Fitness" dot={false} />
+                  <Line type="monotone" dataKey="atl" stroke="#ef4444" strokeWidth={2} name="Fatigue" dot={false} />
+                  <Area type="monotone" dataKey="tsb" fill="url(#tsbFill)" stroke="#06b6d4" strokeWidth={2} name="Readiness" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </motion.div>
           </div>
-        </motion.div>
+        </div>
       </div>
-    </div>
+    </>
   );
-};
-
-// Helper functions for generating prediction data
-const generateBodyCompositionPredictions = (monthsAhead, analytics) => {
-  // Simplified body composition prediction
-  return {
-    muscleGain: Math.round(monthsAhead * 0.8), // ~0.8 lbs muscle per month
-    fatLoss: Math.round(monthsAhead * 0.5), // ~0.5 lbs fat per month
-    confidence: Math.max(60, 85 - monthsAhead * 2)
-  };
-};
-
-const generatePerformanceMilestones = (strengthPredictions, monthsAhead) => {
-  const milestones = [];
-  
-  strengthPredictions.forEach((pred, index) => {
-    if (pred.gain > 20) {
-      milestones.push({
-        id: `milestone_${index}`,
-        title: `${pred.exercise} Breakthrough`,
-        description: `Reach ${pred.predicted} lbs`,
-        value: `${pred.predicted} lbs`,
-        expectedDate: `Month ${Math.ceil(monthsAhead * 0.7)}`,
-        confidence: pred.confidence,
-        icon: index === 0 ? '🏆' : index === 1 ? '🥇' : '💪'
-      });
-    }
-  });
-  
-  return milestones.slice(0, 4);
-};
-
-const generateRiskFactors = (analytics, monthsAhead) => {
-  const risks = [];
-  
-  // Check for overtraining risk
-  if (analytics.weeklyTrends?.length > 0) {
-    const avgWorkouts = analytics.weeklyTrends.reduce((sum, w) => sum + w.workouts, 0) / analytics.weeklyTrends.length;
-    if (avgWorkouts > 6) {
-      risks.push({
-        id: 'overtraining',
-        factor: 'Overtraining Risk',
-        description: 'High training frequency may lead to burnout',
-        level: 'medium'
-      });
-    }
-  }
-  
-  // Check for plateau risk
-  const avgProgressionRate = Object.values(analytics.progressionRates || {})
-    .reduce((sum, rate) => sum + rate, 0) / Object.keys(analytics.progressionRates || {}).length;
-  
-  if (avgProgressionRate < 0.1) {
-    risks.push({
-      id: 'plateau',
-      factor: 'Plateau Risk',
-      description: 'Slow progression may indicate need for program change',
-      level: 'high'
-    });
-  }
-  
-  // Add more risk factors as needed
-  risks.push({
-    id: 'injury_prevention',
-    factor: 'Injury Prevention',
-    description: 'Maintain proper form and adequate rest',
-    level: 'low'
-  });
-  
-  return risks;
-};
-
-const generatePredictionTimeline = (monthsAhead, strengthPredictions) => {
-  const timeline = [];
-  const avgCurrentWeight = strengthPredictions.reduce((sum, p) => sum + p.current, 0) / strengthPredictions.length;
-  const avgPredictedWeight = strengthPredictions.reduce((sum, p) => sum + p.predicted, 0) / strengthPredictions.length;
-  
-  for (let month = 0; month <= monthsAhead; month++) {
-    const progress = month / monthsAhead;
-    const currentValue = avgCurrentWeight + (avgPredictedWeight - avgCurrentWeight) * progress;
-    
-    timeline.push({
-      month: month === 0 ? 'Now' : `Month ${month}`,
-      current: month === 0 ? avgCurrentWeight : null,
-      predicted: Math.round(currentValue)
-    });
-  }
-  
-  return timeline;
 };
 
 export default Predictions;
