@@ -6,7 +6,7 @@ import { useWorkout } from '../contexts/WorkoutContext';
 import { format } from 'date-fns';
 
 const ProgressTracker = () => {
-  const { analytics } = useWorkout();
+  const { analytics, rawData } = useWorkout();
 
   const [selectedMetric, setSelectedMetric] = useState('strength');
   const [timeRange, setTimeRange] = useState('3m');
@@ -29,6 +29,28 @@ const ProgressTracker = () => {
     { id: 'volume', label: 'Volume', color: 'from-purple-500 to-pink-500' },
     { id: 'frequency', label: 'Frequency', color: 'from-blue-500 to-cyan-500' }
   ];
+
+  // Calculate days active from raw data
+  const calculateDaysActive = () => {
+    if (!rawData || rawData.length === 0) return 0;
+    const uniqueDates = new Set(rawData.map(row => row.Date));
+    return uniqueDates.size;
+  };
+
+  // Calculate workout frequency
+  const calculateWorkoutFrequency = () => {
+    if (!rawData || rawData.length === 0) return 0;
+    const uniqueDates = new Set(rawData.map(row => row.Date));
+    const sortedDates = Array.from(uniqueDates).sort();
+    
+    if (sortedDates.length < 2) return 0;
+    
+    const firstDate = new Date(sortedDates[0]);
+    const lastDate = new Date(sortedDates[sortedDates.length - 1]);
+    const daysDiff = Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24));
+    
+    return daysDiff > 0 ? (uniqueDates.size / daysDiff * 7).toFixed(1) : 0; // workouts per week
+  };
 
   // Get all exercise records for the records view
   const getAllExerciseRecords = () => {
@@ -87,20 +109,43 @@ const ProgressTracker = () => {
     return groups.sort();
   };
 
-  // Mock progress photos
-  const progressPhotos = [
-    { id: 1, date: '2025-01-01', url: '/api/placeholder/200/250', label: 'Front' },
-    { id: 2, date: '2025-02-01', url: '/api/placeholder/200/250', label: 'Side' },
-    { id: 3, date: '2025-03-01', url: '/api/placeholder/200/250', label: 'Back' }
-  ];
+  // Calculate total volume change
+  const calculateVolumeChange = () => {
+    if (!analytics?.volumeOverTime || analytics.volumeOverTime.length < 2) return '+0';
+    const recent = analytics.volumeOverTime.slice(-4); // last 4 data points
+    if (recent.length < 2) return '+0';
+    
+    const oldVolume = recent[0].volume;
+    const newVolume = recent[recent.length - 1].volume;
+    const change = newVolume - oldVolume;
+    
+    return change > 0 ? `+${Math.round(change / 1000)}k` : `${Math.round(change / 1000)}k`;
+  };
 
-  // Mock measurements
-  const measurements = [
-    { date: '2025-01-01', chest: 40, arms: 14, waist: 32, thighs: 24 },
-    { date: '2025-02-01', chest: 40.5, arms: 14.2, waist: 31.5, thighs: 24.2 },
-    { date: '2025-03-01', chest: 41, arms: 14.5, waist: 31, thighs: 24.5 },
-    { date: '2025-04-01', chest: 41.5, arms: 14.8, waist: 30.5, thighs: 25 }
-  ];
+  // Calculate exercises change (new exercises in recent period)
+  const calculateExerciseChange = () => {
+    if (!rawData || rawData.length === 0) return '+0';
+    
+    // Get exercises from last 30 days vs previous period
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    
+    const recentExercises = new Set(
+      rawData
+        .filter(row => new Date(row.Date) >= thirtyDaysAgo)
+        .map(row => row['Exercise Name'])
+    );
+    
+    const previousExercises = new Set(
+      rawData
+        .filter(row => new Date(row.Date) >= sixtyDaysAgo && new Date(row.Date) < thirtyDaysAgo)
+        .map(row => row['Exercise Name'])
+    );
+    
+    const newExercises = [...recentExercises].filter(ex => !previousExercises.has(ex));
+    return newExercises.length > 0 ? `+${newExercises.length}` : '0';
+  };
 
   return (
     <div className="min-h-screen lg:ml-80 p-4 lg:p-8">
@@ -150,10 +195,30 @@ const ProgressTracker = () => {
               className="grid grid-cols-1 md:grid-cols-4 gap-6"
             >
               {[
-                { label: 'Days Active', value: '89', change: '+12', icon: Calendar },
-                { label: 'Total Workouts', value: analytics?.totalWorkouts || '0', change: '+8', icon: TrendingUp },
-                { label: 'Total Volume', value: analytics?.totalVolume ? `${Math.round(analytics.totalVolume / 1000)}k` : '0', change: '+15k', icon: Award },
-                { label: 'Exercises', value: analytics?.exerciseStats ? Object.keys(analytics.exerciseStats).length : '0', change: '+2', icon: Target }
+                { 
+                  label: 'Days Active', 
+                  value: calculateDaysActive().toString(), 
+                  change: `${calculateWorkoutFrequency()}/week`, 
+                  icon: Calendar 
+                },
+                { 
+                  label: 'Total Workouts', 
+                  value: analytics?.totalWorkouts || '0', 
+                  change: `${calculateWorkoutFrequency()} per week`, 
+                  icon: TrendingUp 
+                },
+                { 
+                  label: 'Total Volume', 
+                  value: analytics?.totalVolume ? `${Math.round(analytics.totalVolume / 1000)}k` : '0', 
+                  change: calculateVolumeChange(), 
+                  icon: Award 
+                },
+                { 
+                  label: 'Exercises', 
+                  value: analytics?.exerciseStats ? Object.keys(analytics.exerciseStats).length : '0', 
+                  change: calculateExerciseChange(), 
+                  icon: Target 
+                }
               ].map((stat, index) => (
                 <motion.div
                   key={stat.label}
@@ -164,7 +229,7 @@ const ProgressTracker = () => {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <stat.icon className="w-8 h-8 text-purple-400" />
-                    <span className="text-green-400 text-sm font-medium">{stat.change}</span>
+                    <span className="text-blue-400 text-sm font-medium">{stat.change}</span>
                   </div>
                   <p className="text-3xl font-bold text-white mb-1">{stat.value}</p>
                   <p className="text-gray-400 text-sm">{stat.label}</p>
@@ -172,7 +237,7 @@ const ProgressTracker = () => {
               ))}
             </motion.div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
               {/* Progress Chart */}
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
@@ -199,67 +264,48 @@ const ProgressTracker = () => {
                   </div>
                 </div>
 
-                <ResponsiveContainer width="100%" height={250}>
-                  <AreaChart data={analytics?.volumeOverTime?.slice(-12) || []}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="date" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1f2937', 
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
-                        color: '#ffffff'
-                      }} 
-                    />
-                    <defs>
-                      <linearGradient id="progressGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area 
-                      type="monotone" 
-                      dataKey="volume" 
-                      stroke="#8b5cf6" 
-                      fill="url(#progressGradient)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </motion.div>
-
-              {/* Body Measurements */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-                className="p-6 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl"
-              >
-                <h2 className="text-xl font-bold text-white mb-6">Body Measurements</h2>
-                
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={measurements}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="date" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#1f2937', 
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
-                        color: '#ffffff'
-                      }} 
-                    />
-                    <Line type="monotone" dataKey="chest" stroke="#8b5cf6" strokeWidth={2} name="Chest" />
-                    <Line type="monotone" dataKey="arms" stroke="#06b6d4" strokeWidth={2} name="Arms" />
-                    <Line type="monotone" dataKey="waist" stroke="#10b981" strokeWidth={2} name="Waist" />
-                  </LineChart>
-                </ResponsiveContainer>
+                {analytics?.volumeOverTime && analytics.volumeOverTime.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={analytics.volumeOverTime.slice(-12)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="date" stroke="#9ca3af" />
+                      <YAxis stroke="#9ca3af" />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#1f2937', 
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#ffffff'
+                        }} 
+                      />
+                      <defs>
+                        <linearGradient id="progressGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <Area 
+                        type="monotone" 
+                        dataKey="volume" 
+                        stroke="#8b5cf6" 
+                        fill="url(#progressGradient)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <div className="text-center">
+                      <TrendingUp className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 text-lg mb-2">No workout data available</p>
+                      <p className="text-gray-500 text-sm">Upload your workout data to see progress trends</p>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             </div>
 
-            {/* Progress Photos */}
+            {/* Progress Photos Section - Show when no data */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -278,38 +324,18 @@ const ProgressTracker = () => {
                 </motion.button>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {progressPhotos.map((photo, index) => (
-                  <motion.div
-                    key={photo.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.5 + index * 0.1 }}
-                    className="relative group"
-                  >
-                    <div className="aspect-[3/4] bg-slate-700 rounded-lg overflow-hidden">
-                      <div className="w-full h-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                        <Camera className="w-12 h-12 text-gray-400" />
-                      </div>
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm p-2 rounded-b-lg">
-                      <p className="text-white text-sm font-medium">{photo.label}</p>
-                      <p className="text-gray-300 text-xs">{photo.date}</p>
-                    </div>
-                  </motion.div>
-                ))}
-                
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.5 + progressPhotos.length * 0.1 }}
-                  className="aspect-[3/4] border-2 border-dashed border-slate-600 rounded-lg flex items-center justify-center hover:border-purple-500 transition-all cursor-pointer group"
+              <div className="text-center py-8">
+                <Camera className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 text-lg mb-2">No progress photos yet</p>
+                <p className="text-gray-500 text-sm">Add your first progress photo to track your transformation</p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="mt-4 px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all flex items-center mx-auto"
                 >
-                  <div className="text-center">
-                    <Plus className="w-8 h-8 text-gray-400 group-hover:text-purple-400 mx-auto mb-2 transition-colors" />
-                    <p className="text-gray-400 group-hover:text-purple-400 text-sm transition-colors">Add Photo</p>
-                  </div>
-                </motion.div>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add First Photo
+                </motion.button>
               </div>
             </motion.div>
           </>
