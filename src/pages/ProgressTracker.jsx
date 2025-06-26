@@ -243,52 +243,138 @@ const ProgressTracker = () => {
 
     switch (metricType) {
       case 'daysActive':
+        // Get all unique workout dates and group by month
+        const uniqueDates = [...new Set(rawData.map(row => row.Date))].sort();
+        const datesByMonth = {};
+        
+        uniqueDates.forEach(date => {
+          const monthKey = format(new Date(date), 'MMM yyyy');
+          if (!datesByMonth[monthKey]) {
+            datesByMonth[monthKey] = [];
+          }
+          datesByMonth[monthKey].push(date);
+        });
+
+        const monthlyBreakdown = Object.entries(datesByMonth)
+          .map(([month, dates]) => `${month}: ${dates.length} days`)
+          .join('\n');
+
         content.sections = [
           {
             subtitle: 'What it means',
             text: `You have been active for ${value} unique workout days. This represents your consistency and commitment to your fitness routine.`
           },
           {
-            subtitle: 'How it was calculated',
-            text: 'We count each unique date where you logged at least one exercise set. Multiple exercises on the same day count as one active day.'
+            subtitle: 'Monthly Breakdown',
+            text: monthlyBreakdown
           },
           {
-            subtitle: 'Your Key Data',
-            text: `• Active Days: ${value}\n• Average Frequency: ${calculateWorkoutFrequency()} workouts per week\n• Total Exercises: ${analytics?.exerciseStats ? Object.keys(analytics.exerciseStats).length : 0}`
+            subtitle: 'Recent Activity',
+            text: `Most Recent Workout: ${uniqueDates[uniqueDates.length - 1]}\nFirst Workout: ${uniqueDates[0]}\nLongest Gap: ${calculateLongestGap(uniqueDates)} days\nAverage Rest Days: ${calculateAverageRestDays(uniqueDates)} days`
+          },
+          {
+            subtitle: 'All Workout Dates',
+            text: uniqueDates.slice(-20).reverse().join(', ') + (uniqueDates.length > 20 ? '\n...and more' : '')
           }
         ];
         break;
       
       case 'totalWorkouts':
+        // Group exercises by workout date
+        const workoutsByDate = {};
+        rawData.forEach(row => {
+          const date = row.Date;
+          if (!workoutsByDate[date]) {
+            workoutsByDate[date] = {
+              exercises: new Set(),
+              totalSets: 0,
+              totalVolume: 0
+            };
+          }
+          workoutsByDate[date].exercises.add(row['Exercise Name']);
+          workoutsByDate[date].totalSets += 1;
+          workoutsByDate[date].totalVolume += (parseFloat(row.Weight) || 0) * (parseInt(row.Reps) || 1);
+        });
+
+        const workoutDetails = Object.entries(workoutsByDate)
+          .sort(([a], [b]) => new Date(b) - new Date(a))
+          .slice(0, 10)
+          .map(([date, data]) => 
+            `${format(new Date(date), 'MMM dd, yyyy')}: ${data.exercises.size} exercises, ${data.totalSets} sets, ${Math.round(data.totalVolume).toLocaleString()} lbs`
+          ).join('\n');
+
+        const avgExercisesPerWorkout = Object.values(workoutsByDate).reduce((sum, w) => sum + w.exercises.size, 0) / Object.keys(workoutsByDate).length;
+        const avgSetsPerWorkout = Object.values(workoutsByDate).reduce((sum, w) => sum + w.totalSets, 0) / Object.keys(workoutsByDate).length;
+
         content.sections = [
           {
             subtitle: 'What it means',
             text: `You have completed ${value} total workouts. This metric shows your overall training volume and dedication.`
           },
           {
-            subtitle: 'How it was calculated',
-            text: 'Each unique date with logged exercises counts as one workout session.'
+            subtitle: 'Workout Averages',
+            text: `• Average Exercises per Workout: ${avgExercisesPerWorkout.toFixed(1)}\n• Average Sets per Workout: ${avgSetsPerWorkout.toFixed(1)}\n• Average Volume per Workout: ${analytics?.totalVolume && analytics?.totalWorkouts ? Math.round(analytics.totalVolume / analytics.totalWorkouts).toLocaleString() : 'N/A'} lbs`
           },
           {
-            subtitle: 'Your Key Data',
-            text: `• Total Workouts: ${value}\n• Frequency: ${calculateWorkoutFrequency()} per week\n• Most Recent: ${rawData?.length > 0 ? new Date(Math.max(...rawData.map(r => new Date(r.Date)))).toLocaleDateString() : 'N/A'}`
+            subtitle: 'Recent Workouts (Last 10)',
+            text: workoutDetails
           }
         ];
         break;
 
       case 'totalVolume':
+        // Calculate volume by exercise
+        const volumeByExercise = {};
+        rawData.forEach(row => {
+          const exercise = row['Exercise Name'];
+          const volume = (parseFloat(row.Weight) || 0) * (parseInt(row.Reps) || 1);
+          if (!volumeByExercise[exercise]) {
+            volumeByExercise[exercise] = 0;
+          }
+          volumeByExercise[exercise] += volume;
+        });
+
+        const topExercisesByVolume = Object.entries(volumeByExercise)
+          .sort(([,a], [,b]) => b - a)
+          .slice(0, 10)
+          .map(([exercise, vol], index) => 
+            `${index + 1}. ${exercise}: ${Math.round(vol).toLocaleString()} lbs (${((vol / analytics.totalVolume) * 100).toFixed(1)}%)`
+          ).join('\n');
+
+        // Calculate volume by muscle group
+        const volumeByMuscleGroup = {};
+        if (analytics?.exerciseStats) {
+          Object.entries(analytics.exerciseStats).forEach(([exercise, stats]) => {
+            const muscleGroup = stats.muscleGroup;
+            if (!volumeByMuscleGroup[muscleGroup]) {
+              volumeByMuscleGroup[muscleGroup] = 0;
+            }
+            volumeByMuscleGroup[muscleGroup] += stats.totalVolume;
+          });
+        }
+
+        const muscleGroupBreakdown = Object.entries(volumeByMuscleGroup)
+          .sort(([,a], [,b]) => b - a)
+          .map(([group, vol]) => 
+            `${group.charAt(0).toUpperCase() + group.slice(1)}: ${Math.round(vol).toLocaleString()} lbs (${((vol / analytics.totalVolume) * 100).toFixed(1)}%)`
+          ).join('\n');
+
         content.sections = [
           {
             subtitle: 'What it means',
             text: `Your total training volume is ${value}. Volume = Weight × Reps × Sets, representing the total mechanical work performed.`
           },
           {
-            subtitle: 'How it was calculated',
-            text: 'We sum up (Weight × Reps) for every set across all your exercises and workouts.'
+            subtitle: 'Top 10 Exercises by Volume',
+            text: topExercisesByVolume
           },
           {
-            subtitle: 'Your Key Data',
-            text: `• Total Volume: ${value}\n• Volume Change: ${calculateVolumeChange()}\n• Average per Workout: ${analytics?.totalVolume && analytics?.totalWorkouts ? Math.round(analytics.totalVolume / analytics.totalWorkouts).toLocaleString() : 'N/A'} lbs`,
+            subtitle: 'Volume by Muscle Group',
+            text: muscleGroupBreakdown || 'No muscle group data available'
+          },
+          {
+            subtitle: 'Volume Progression',
+            text: `• Total Volume: ${value}\n• Volume Change: ${calculateVolumeChange()}\n• Average per Set: ${Math.round(analytics.totalVolume / rawData.length)} lbs`,
             chartData: analytics?.volumeOverTime?.slice(-10),
             chartKey: 'volume'
           }
@@ -296,24 +382,132 @@ const ProgressTracker = () => {
         break;
 
       case 'exercises':
+        // Get detailed exercise breakdown
+        const exerciseBreakdown = {};
+        rawData.forEach(row => {
+          const exercise = row['Exercise Name'];
+          const date = row.Date;
+          if (!exerciseBreakdown[exercise]) {
+            exerciseBreakdown[exercise] = {
+              dates: new Set(),
+              sets: 0,
+              maxWeight: 0,
+              totalVolume: 0,
+              firstPerformed: date,
+              lastPerformed: date
+            };
+          }
+          
+          exerciseBreakdown[exercise].dates.add(date);
+          exerciseBreakdown[exercise].sets += 1;
+          exerciseBreakdown[exercise].maxWeight = Math.max(exerciseBreakdown[exercise].maxWeight, parseFloat(row.Weight) || 0);
+          exerciseBreakdown[exercise].totalVolume += (parseFloat(row.Weight) || 0) * (parseInt(row.Reps) || 1);
+          
+          if (new Date(date) < new Date(exerciseBreakdown[exercise].firstPerformed)) {
+            exerciseBreakdown[exercise].firstPerformed = date;
+          }
+          if (new Date(date) > new Date(exerciseBreakdown[exercise].lastPerformed)) {
+            exerciseBreakdown[exercise].lastPerformed = date;
+          }
+        });
+
+        // Convert to array and sort by various criteria
+        const exerciseList = Object.entries(exerciseBreakdown)
+          .map(([name, data]) => ({
+            name,
+            sessions: data.dates.size,
+            sets: data.sets,
+            maxWeight: data.maxWeight,
+            totalVolume: data.totalVolume,
+            firstPerformed: data.firstPerformed,
+            lastPerformed: data.lastPerformed,
+            muscleGroup: analytics?.exerciseStats?.[name]?.muscleGroup || 'unknown'
+          }));
+
+        // Most frequently performed
+        const mostFrequent = exerciseList
+          .sort((a, b) => b.sessions - a.sessions)
+          .slice(0, 5)
+          .map((ex, i) => `${i + 1}. ${ex.name}: ${ex.sessions} sessions, ${ex.sets} sets`)
+          .join('\n');
+
+        // Highest volume
+        const highestVolume = exerciseList
+          .sort((a, b) => b.totalVolume - a.totalVolume)
+          .slice(0, 5)
+          .map((ex, i) => `${i + 1}. ${ex.name}: ${Math.round(ex.totalVolume).toLocaleString()} lbs`)
+          .join('\n');
+
+        // Recently added exercises (last 30 days)
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const recentExercises = exerciseList
+          .filter(ex => new Date(ex.firstPerformed) >= thirtyDaysAgo)
+          .sort((a, b) => new Date(b.firstPerformed) - new Date(a.firstPerformed))
+          .slice(0, 5)
+          .map(ex => `• ${ex.name} (started ${format(new Date(ex.firstPerformed), 'MMM dd')})`)
+          .join('\n');
+
+        // By muscle group
+        const exercisesByMuscleGroup = {};
+        exerciseList.forEach(ex => {
+          if (!exercisesByMuscleGroup[ex.muscleGroup]) {
+            exercisesByMuscleGroup[ex.muscleGroup] = [];
+          }
+          exercisesByMuscleGroup[ex.muscleGroup].push(ex.name);
+        });
+
+        const muscleGroupList = Object.entries(exercisesByMuscleGroup)
+          .sort(([,a], [,b]) => b.length - a.length)
+          .map(([group, exercises]) => 
+            `${group.charAt(0).toUpperCase() + group.slice(1)} (${exercises.length}): ${exercises.slice(0, 3).join(', ')}${exercises.length > 3 ? '...' : ''}`
+          ).join('\n');
+
         content.sections = [
           {
             subtitle: 'What it means',
             text: `You have performed ${value} different exercises. Exercise variety helps target different muscle groups and prevents plateaus.`
           },
           {
-            subtitle: 'How it was calculated',
-            text: 'We count each unique exercise name that appears in your workout data.'
+            subtitle: 'Most Frequently Performed',
+            text: mostFrequent
           },
           {
-            subtitle: 'Your Key Data',
-            text: `• Total Exercises: ${value}\n• New This Month: ${calculateExerciseChange()}\n• Most Popular: ${analytics?.exerciseStats ? Object.values(analytics.exerciseStats).sort((a, b) => b.sets - a.sets)[0]?.name || 'N/A' : 'N/A'}`
+            subtitle: 'Highest Volume Exercises',
+            text: highestVolume
+          },
+          {
+            subtitle: 'Recently Added (Last 30 Days)',
+            text: recentExercises || 'No new exercises added recently'
+          },
+          {
+            subtitle: 'Exercises by Muscle Group',
+            text: muscleGroupList
           }
         ];
         break;
     }
 
     setDrillDownModal({ isOpen: true, content });
+  };
+
+  // Helper functions for enhanced drill-down
+  const calculateLongestGap = (dates) => {
+    if (dates.length < 2) return 0;
+    let maxGap = 0;
+    for (let i = 1; i < dates.length; i++) {
+      const gap = Math.ceil((new Date(dates[i]) - new Date(dates[i-1])) / (1000 * 60 * 60 * 24));
+      maxGap = Math.max(maxGap, gap);
+    }
+    return maxGap;
+  };
+
+  const calculateAverageRestDays = (dates) => {
+    if (dates.length < 2) return 0;
+    let totalGaps = 0;
+    for (let i = 1; i < dates.length; i++) {
+      totalGaps += Math.ceil((new Date(dates[i]) - new Date(dates[i-1])) / (1000 * 60 * 60 * 24));
+    }
+    return Math.round(totalGaps / (dates.length - 1));
   };
 
   const handleExerciseDrillDown = (exercise) => {
