@@ -1,6 +1,6 @@
 # MuscleMind Pro - AI-Powered Workout Analytics
 
-The world's most advanced workout analytics platform with AI predictions, 3D visualizations, gamification, and comprehensive performance tracking.
+The world's most advanced workout analytics platform with AI predictions, 3D visualizations, and comprehensive performance tracking.
 
 ## 🚀 Features
 
@@ -10,11 +10,7 @@ The world's most advanced workout analytics platform with AI predictions, 3D vis
 - **3D Visualizations**: Interactive WebGL charts and data representations
 - **Progress Tracking**: Photos, measurements, and milestone tracking
 
-### Gamification
-- **Level System**: XP-based progression with achievements
-- **Challenges**: Daily, weekly, and custom fitness challenges
-- **Leaderboards**: Compare with friends and global community
-- **Rewards**: Unlock badges, titles, and customizations
+
 
 ### Smart Features
 - **Plateau Detection**: AI identifies training plateaus before they happen
@@ -93,25 +89,7 @@ MuscleMind Pro works with data exported from the Strong app:
 ### Custom Themes
 Themes can be customized in `src/contexts/ThemeContext.jsx`
 
-## 🎮 Gamification System
 
-### XP & Levels
-- Gain XP from workouts, achievements, and challenges
-- Level up to unlock new features and customizations
-- Each level requires more XP (exponential scaling)
-
-### Achievement Types
-- **Milestones**: First workout, volume goals, streak achievements
-- **Strength**: Weight lifting achievements (100lb bench, etc.)
-- **Special**: Time-based, form-based, unique accomplishments
-- **Social**: Sharing and community engagement
-
-### Rarity System
-- **Common**: Basic achievements (gray)
-- **Uncommon**: Regular progress goals (blue)
-- **Rare**: Significant milestones (purple)
-- **Epic**: Major accomplishments (pink)
-- **Legendary**: Exceptional achievements (gold)
 
 ## 📱 Features Roadmap
 
@@ -120,14 +98,11 @@ Themes can be customized in `src/contexts/ThemeContext.jsx`
 - Advanced analytics dashboard
 - AI strength predictions
 - 3D visualization engine
-- Gamification system
 - Progress tracking
 - Workout planner
 - Theme system with 5 themes
 
 ### Coming Soon 🚧
-- AI Coach (personal training assistant)
-- Social Hub (community features)
 - Mobile app (React Native)
 - Wearable device integration
 - Nutrition tracking

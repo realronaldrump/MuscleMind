@@ -2,12 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Activity, BarChart3, Brain, Box, Trophy, MessageSquare,
-  Calendar, TrendingUp, Settings, User, Menu, X, Zap,
-  Target, Star, Upload, Bell, Search
+  Activity, BarChart3, Brain, Box, Calendar, TrendingUp, 
+  Settings, User, Menu, X, Upload, Bell, Search
 } from 'lucide-react';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { useGame } from '../contexts/GameContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Navigation = () => {
@@ -16,7 +14,6 @@ const Navigation = () => {
   const [notifications, setNotifications] = useState([]);
   const location = useLocation();
   const { rawData, userProfile, actions } = useWorkout();
-  const { level, xp, actions: gameActions } = useGame();
   const { theme } = useTheme();
 
   const navigationItems = [
@@ -49,20 +46,6 @@ const Navigation = () => {
       color: 'from-orange-500 to-red-500'
     },
     {
-      path: '/gamification',
-      label: 'Gaming',
-      icon: Trophy,
-      description: 'Achievements & Challenges',
-      color: 'from-yellow-500 to-orange-500'
-    },
-    {
-      path: '/ai-coach',
-      label: 'AI Coach',
-      icon: MessageSquare,
-      description: 'Personal Training Assistant',
-      color: 'from-indigo-500 to-purple-500'
-    },
-    {
       path: '/workout-planner',
       label: 'Planner',
       icon: Calendar,
@@ -93,18 +76,8 @@ const Navigation = () => {
       });
     }
     
-    if (level > 1 && gameActions.getProgressToNextLevel() > 80) {
-      newNotifications.push({
-        id: 'level-up-soon',
-        type: 'success',
-        title: 'Level Up Soon!',
-        message: `Only ${gameActions.calculateXPToNextLevel()} XP to level ${level + 1}`,
-        icon: Star
-      });
-    }
-    
     setNotifications(newNotifications);
-  }, [rawData, level, gameActions]);
+  }, [rawData]);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -147,15 +120,7 @@ const Navigation = () => {
               </div>
               <div className="flex-1 text-left">
                 <p className="text-white font-medium">{userProfile.name || 'Set Profile'}</p>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs text-purple-400">Level {level}</span>
-                  <div className="flex-1 h-1 bg-slate-600 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
-                      style={{ width: `${gameActions.getProgressToNextLevel()}%` }}
-                    />
-                  </div>
-                </div>
+                <p className="text-xs text-gray-400">User Profile</p>
               </div>
             </motion.button>
             
@@ -227,11 +192,7 @@ const Navigation = () => {
 
         {/* Quick Stats */}
         <div className="p-4 border-t border-slate-700/50">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-gray-400">Total XP</p>
-              <p className="text-lg font-bold text-purple-400">{xp.toLocaleString()}</p>
-            </div>
+          <div className="grid grid-cols-1 gap-3">
             <div className="p-3 bg-slate-800/50 rounded-lg">
               <p className="text-xs text-gray-400">Workouts</p>
               <p className="text-lg font-bold text-blue-400">{rawData.length > 0 ? new Set(rawData.map(r => r.Date)).size : 0}</p>
@@ -306,11 +267,7 @@ const Navigation = () => {
                     </div>
                     <div className="flex-1">
                       <p className="text-white font-medium">{userProfile.name || 'Set Profile'}</p>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-purple-400">Level {level}</span>
-                        <span className="text-sm text-gray-400">•</span>
-                        <span className="text-sm text-gray-400">{xp} XP</span>
-                      </div>
+                      <p className="text-xs text-gray-400">User Profile</p>
                     </div>
                   </div>
                 </div>

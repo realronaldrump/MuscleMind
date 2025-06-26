@@ -6,13 +6,11 @@ import {
 } from 'lucide-react';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useGame } from '../contexts/GameContext';
 import { toast } from 'react-hot-toast';
 
 const Settings = () => {
   const { userProfile, actions } = useWorkout();
   const { currentTheme, themes, actions: themeActions } = useTheme();
-  const { preferences, actions: gameActions } = useGame();
   const [activeSection, setActiveSection] = useState('profile');
 
   const sections = [
@@ -31,9 +29,7 @@ const Settings = () => {
     themeActions.changeTheme(themeName);
   };
 
-  const handleGamePrefsUpdate = (field, value) => {
-    gameActions.updatePreferences({ [field]: value });
-  };
+
 
   return (
     <div className="min-h-screen lg:ml-80 p-4 lg:p-8">
@@ -164,26 +160,9 @@ const Settings = () => {
                 <div className="p-6 bg-slate-800/50 rounded-2xl border border-slate-700/50">
                   <h2 className="text-xl font-bold text-white mb-4">Notification Preferences</h2>
                   <div className="space-y-4">
-                    {[
-                      { key: 'showLevelUps', label: 'Level Up Notifications' },
-                      { key: 'showAchievements', label: 'Achievement Unlocks' },
-                      { key: 'soundEffects', label: 'Sound Effects' },
-                      { key: 'celebrations', label: 'Celebration Animations' }
-                    ].map((pref) => (
-                      <div key={pref.key} className="flex items-center justify-between">
-                        <span className="text-white">{pref.label}</span>
-                        <button
-                          onClick={() => handleGamePrefsUpdate(pref.key, !preferences[pref.key])}
-                          className={`w-12 h-6 rounded-full transition-all ${
-                            preferences[pref.key] ? 'bg-purple-500' : 'bg-slate-600'
-                          }`}
-                        >
-                          <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                            preferences[pref.key] ? 'translate-x-6' : 'translate-x-1'
-                          }`} />
-                        </button>
-                      </div>
-                    ))}
+                    <p className="text-gray-400 text-center py-8">
+                      Notification settings will be available in a future update.
+                    </p>
                   </div>
                 </div>
               </motion.div>

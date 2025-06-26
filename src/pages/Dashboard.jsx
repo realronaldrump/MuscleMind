@@ -2,22 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Upload, Activity, Target, TrendingUp, Zap, Award, Brain, 
-  Flame, BarChart3, Calendar, Clock, Users, Star, Play,
+  Flame, BarChart3, Calendar, Clock, Users, Play,
   ChevronRight, Bell, Settings, Download, Share2
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
          AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, 
          Radar, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } from 'recharts';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { useGame } from '../contexts/GameContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { parseISO, subDays, format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const { rawData, analytics, predictions, loading, actions } = useWorkout();
-  const { level, xp, achievements, actions: gameActions } = useGame();
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const [selectedMetric, setSelectedMetric] = useState('volume');
   const [timeRange, setTimeRange] = useState('30d');
   const [showWelcome, setShowWelcome] = useState(false);
@@ -36,6 +37,182 @@ const Dashboard = () => {
       actions.uploadWorkoutData(file);
       toast.success('Uploading your workout data...');
     }
+  };
+
+  // Time filtering functions
+  const filterDataByTimeRange = (data, range) => {
+    if (!data || data.length === 0) return [];
+    
+    const now = new Date();
+    let cutoffDate;
+    
+    switch (range) {
+      case '7d':
+        cutoffDate = subDays(now, 7);
+        break;
+      case '30d':
+        cutoffDate = subDays(now, 30);
+        break;
+      case '90d':
+        cutoffDate = subDays(now, 90);
+        break;
+      case 'all':
+        return data; // Return all data for "all time"
+      default:
+        cutoffDate = subDays(now, 30);
+    }
+    
+    return data.filter(item => {
+      const itemDate = typeof item.date === 'string' ? parseISO(item.date) : item.date;
+      return itemDate >= cutoffDate;
+    });
+  };
+
+  // Get filtered volume data for charts
+  const getFilteredVolumeData = () => {
+    if (!analytics?.volumeOverTime) return [];
+    return filterDataByTimeRange(analytics.volumeOverTime, timeRange);
+  };
+
+  // Button handlers
+  const handleViewFullAnalysis = () => {
+    navigate('/analytics');
+    toast.success('Viewing detailed analytics...');
+  };
+
+  const handleQuickAction = (action) => {
+    switch (action.label) {
+      case 'Plan Workout':
+        navigate('/workout-planner');
+        toast.success('Opening workout planner...');
+        break;
+      case 'View Progress':
+        navigate('/progress');
+        toast.success('Opening progress tracker...');
+        break;
+      case 'Export Data':
+        actions.exportData();
+        break;
+      case 'Share Stats':
+        // Create shareable summary
+        const summary = `💪 My MuscleMind Stats:\n• Total Volume: ${analytics ? (analytics.totalVolume / 1000).toFixed(1) : 0}K lbs\n• Workouts: ${analytics?.totalWorkouts || 0}\n• Consistency Score: ${analytics?.consistency?.score || 0}%`;
+        navigator.clipboard.writeText(summary);
+        toast.success('Stats copied to clipboard!');
+        break;
+      default:
+        toast.info(`${action.label} coming soon!`);
+    }
+  };
+
+  const handleViewAllRecords = () => {
+    navigate('/progress?view=records');
+    toast.success('Viewing all exercise records...');
+  };
+
+  // Generate real AI insights from actual data
+  const generateRealInsights = () => {
+    if (!analytics || !predictions) return [];
+
+    const insights = [];
+
+    // 1. Progression Velocity Analysis
+    const topExercises = Object.values(analytics.exerciseStats)
+      .filter(ex => ex.progression.confidence > 0.5)
+      .sort((a, b) => b.progression.weeklyE1RMGain - a.progression.weeklyE1RMGain)
+      .slice(0, 3);
+
+    if (topExercises.length > 0) {
+      const avgProgression = topExercises.reduce((sum, ex) => sum + ex.progression.weeklyE1RMGain, 0) / topExercises.length;
+      const strengthGain = (avgProgression * 12) / topExercises[0].maxE1RM * 100; // 3 month projection as percentage
+      
+      insights.push({
+        icon: 'Flame',
+        title: 'Progression Velocity',
+        content: `Your top exercises are progressing at ${avgProgression.toFixed(1)} lbs/week average. Current trajectory suggests ${strengthGain.toFixed(1)}% strength gain over the next 3 months with ${Math.round(topExercises[0].progression.confidence * 100)}% confidence.`
+      });
+    }
+
+    // 2. Volume Optimization
+    if (predictions.hypertrophyPotential) {
+      const hypertrophy = predictions.hypertrophyPotential;
+      const volumeRecommendation = hypertrophy.scores.volume < 70 ? 
+        `Consider increasing your weekly volume by ${Math.round((70 - hypertrophy.scores.volume) * 0.5)}% for optimal muscle growth.` :
+        `Your current weekly volume of ${hypertrophy.details.avgWeeklyVolume.toLocaleString()} lbs is optimal for muscle growth.`;
+      
+      insights.push({
+        icon: 'Target',
+        title: 'Volume Optimization',
+        content: `${volumeRecommendation} ${hypertrophy.recommendations.length > 0 ? hypertrophy.recommendations[0] : ''}`
+      });
+    }
+
+    // 3. Recovery Pattern Analysis
+    if (analytics.fitnessFatigue && analytics.fitnessFatigue.length > 0) {
+      const currentReadiness = analytics.fitnessFatigue[analytics.fitnessFatigue.length - 1];
+      const avgWorkoutsPerWeek = analytics.weeklyTrends.length > 0 ? 
+        analytics.weeklyTrends.reduce((sum, week) => sum + week.workouts, 0) / analytics.weeklyTrends.length : 0;
+      
+      const readinessStatus = currentReadiness.tsb > 5 ? 'optimal' : 
+                            currentReadiness.tsb > -10 ? 'moderate' : 'high';
+      
+      insights.push({
+        icon: 'Zap',
+        title: 'Recovery Pattern',
+        content: `Your current training readiness is ${readinessStatus} (TSB: ${currentReadiness.tsb.toFixed(1)}). Training frequency of ${avgWorkoutsPerWeek.toFixed(1)} sessions per week ${readinessStatus === 'optimal' ? 'aligns perfectly with your recovery capacity.' : 'may need adjustment for optimal recovery.'}`
+      });
+    }
+
+    // 4. Plateau Prevention
+    const recentWeeks = analytics.weeklyTrends.slice(-4);
+    if (recentWeeks.length >= 4) {
+      const volumeTrend = recentWeeks[recentWeeks.length - 1].volume - recentWeeks[0].volume;
+      const trendDirection = volumeTrend > 0 ? 'increasing' : volumeTrend < 0 ? 'decreasing' : 'stable';
+      
+      insights.push({
+        icon: 'Brain',
+        title: 'Plateau Prevention',
+        content: `Volume trend is ${trendDirection} over the last 4 weeks (${volumeTrend > 0 ? '+' : ''}${volumeTrend.toFixed(0)} lbs). ${volumeTrend > 0 ? 'Current progression rate is sustainable for 8-10 weeks before requiring periodization.' : 'Consider implementing progressive overload to avoid plateaus.'}`
+      });
+    }
+
+    // 5. Future Projections
+    if (predictions.strengthProjections) {
+      const exercises = Object.values(predictions.strengthProjections);
+      if (exercises.length > 0) {
+        const bestExercise = exercises.reduce((best, ex) => 
+          ex.timeframes[0].predictedE1RM > best.timeframes[0].predictedE1RM ? ex : best
+        );
+        
+        insights.push({
+          icon: 'TrendingUp',
+          title: 'Future Projections',
+          content: `Based on current trends, your ${bestExercise.name} is projected to reach ${bestExercise.timeframes[0].predictedE1RM} lbs in 3 months (currently ${bestExercise.currentE1RM} lbs). Confidence interval: ${bestExercise.timeframes[0].range[0]}-${bestExercise.timeframes[0].range[1]} lbs.`
+        });
+      }
+    }
+
+    // 6. Muscle Group Balance
+    if (analytics.muscleGroups) {
+      const groups = Object.values(analytics.muscleGroups);
+      const avgVolume = groups.reduce((sum, g) => sum + g.totalVolume, 0) / groups.length;
+      const imbalancedGroups = groups.filter(g => g.totalVolume < avgVolume * 0.7);
+      
+      if (imbalancedGroups.length > 0) {
+        insights.push({
+          icon: 'Target',
+          title: 'Muscle Balance',
+          content: `${imbalancedGroups.map(g => g.name).join(', ')} ${imbalancedGroups.length === 1 ? 'is' : 'are'} undertrained compared to other muscle groups. Consider adding ${Math.round((avgVolume - imbalancedGroups[0].totalVolume) / 1000)}K lbs more volume to improve balance.`
+        });
+      } else {
+        insights.push({
+          icon: 'Target',
+          title: 'Muscle Balance',
+          content: `Excellent muscle group balance detected across all major movement patterns. Your training distribution promotes balanced development and injury prevention.`
+        });
+      }
+    }
+
+    return insights.slice(0, 6); // Limit to 6 insights to fit the UI
   };
 
   if (loading) {
@@ -210,13 +387,6 @@ const Dashboard = () => {
           </div>
           
           <div className="flex items-center space-x-4 mt-4 lg:mt-0">
-            <div className="flex items-center space-x-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-slate-700/50">
-              <Star className="w-4 h-4 text-yellow-400" />
-              <span className="text-white font-medium">Level {level}</span>
-              <span className="text-gray-400">•</span>
-              <span className="text-purple-400">{xp} XP</span>
-            </div>
-            
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -234,40 +404,62 @@ const Dashboard = () => {
           transition={{ delay: 0.1 }}
           className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6"
         >
-          {[
-            {
-              label: 'Total Volume',
-              value: analytics ? `${(analytics.totalVolume / 1000).toFixed(1)}K` : '0',
-              unit: 'lbs',
-              icon: BarChart3,
-              color: 'from-purple-500 to-pink-500',
-              change: '+12%'
-            },
-            {
-              label: 'Workouts',
-              value: analytics ? analytics.totalWorkouts : 0,
-              unit: 'sessions',
-              icon: Activity,
-              color: 'from-blue-500 to-cyan-500',
-              change: '+8%'
-            },
-            {
-              label: 'Avg Duration',
-              value: analytics ? Math.round(analytics.avgWorkoutDuration) : 0,
-              unit: 'minutes',
-              icon: Clock,
-              color: 'from-emerald-500 to-teal-500',
-              change: '+5%'
-            },
-            {
-              label: 'Achievements',
-              value: achievements.length,
-              unit: 'unlocked',
-              icon: Award,
-              color: 'from-orange-500 to-red-500',
-              change: '+3'
-            }
-          ].map((stat, index) => (
+          {(() => {
+            // Calculate real percentage changes
+            const getVolumeChange = () => {
+              if (!analytics?.weeklyTrends || analytics.weeklyTrends.length < 2) return '+0%';
+              const recent = analytics.weeklyTrends.slice(-2);
+              const change = ((recent[1].volume - recent[0].volume) / recent[0].volume) * 100;
+              return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
+            };
+
+            const getWorkoutChange = () => {
+              if (!analytics?.weeklyTrends || analytics.weeklyTrends.length < 2) return '+0%';
+              const recent = analytics.weeklyTrends.slice(-2);
+              const change = recent[1].workouts - recent[0].workouts;
+              return `${change > 0 ? '+' : ''}${change}`;
+            };
+
+            const getProgressingExercises = () => {
+              if (!analytics?.exerciseStats) return 0;
+              return Object.values(analytics.exerciseStats).filter(ex => ex.progression.weeklyE1RMGain > 0).length;
+            };
+
+            return [
+              {
+                label: 'Total Volume',
+                value: analytics ? `${(analytics.totalVolume / 1000).toFixed(1)}K` : '0',
+                unit: 'lbs',
+                icon: BarChart3,
+                color: 'from-purple-500 to-pink-500',
+                change: getVolumeChange()
+              },
+              {
+                label: 'Workouts',
+                value: analytics ? analytics.totalWorkouts : 0,
+                unit: 'sessions',
+                icon: Activity,
+                color: 'from-blue-500 to-cyan-500',
+                change: getWorkoutChange()
+              },
+              {
+                label: 'Avg Duration',
+                value: analytics ? Math.round(analytics.avgWorkoutDuration) : 0,
+                unit: 'minutes',
+                icon: Clock,
+                color: 'from-emerald-500 to-teal-500',
+                change: analytics?.consistency ? `${analytics.consistency.score}%` : '0%'
+              },
+              {
+                label: 'Progressing',
+                value: getProgressingExercises(),
+                unit: 'exercises',
+                icon: Award,
+                color: 'from-orange-500 to-red-500',
+                change: analytics?.exerciseStats ? `${Object.keys(analytics.exerciseStats).length} total` : '0 total'
+              }
+            ];
+          })().map((stat, index) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -306,78 +498,62 @@ const Dashboard = () => {
               </div>
             </div>
             
+            {generateRealInsights().length === 0 ? (
+              <div className="text-center py-8">
+                <Brain className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 text-lg mb-2">Analyzing your workout data...</p>
+                <p className="text-gray-500 text-sm">Upload more workout data to get personalized AI insights</p>
+              </div>
+            ) : (
+            
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="space-y-4">
-                <div className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                  <div className="flex items-center mb-2">
-                    <Flame className="w-5 h-5 text-orange-400 mr-2" />
-                    <h3 className="text-white font-semibold">Progression Velocity</h3>
-                  </div>
-                  <p className="text-gray-300 text-sm">
-                    Your strength is increasing at 15% above average rate. Current trajectory suggests 
-                    a 23% overall strength gain in the next 3 months.
-                  </p>
-                </div>
+              {generateRealInsights().map((insight, index) => {
+                // Dynamic icon mapping
+                const IconComponent = {
+                  'Flame': Flame,
+                  'Target': Target,
+                  'Zap': Zap,
+                  'Brain': Brain,
+                  'TrendingUp': TrendingUp
+                }[insight.icon] || Target;
                 
-                <div className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                  <div className="flex items-center mb-2">
-                    <Target className="w-5 h-5 text-green-400 mr-2" />
-                    <h3 className="text-white font-semibold">Volume Optimization</h3>
-                  </div>
-                  <p className="text-gray-300 text-sm">
-                    Consider increasing your weekly volume by 12% for optimal muscle growth. 
-                    Focus on compound movements for maximum efficiency.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                  <div className="flex items-center mb-2">
-                    <Zap className="w-5 h-5 text-yellow-400 mr-2" />
-                    <h3 className="text-white font-semibold">Recovery Pattern</h3>
-                  </div>
-                  <p className="text-gray-300 text-sm">
-                    Your recovery metrics indicate optimal training frequency. 
-                    Current 4.2 sessions per week aligns perfectly with your goals.
-                  </p>
-                </div>
+                const iconColors = {
+                  'Flame': 'text-orange-400',
+                  'Target': 'text-green-400',
+                  'Zap': 'text-yellow-400',
+                  'Brain': 'text-purple-400',
+                  'TrendingUp': 'text-blue-400'
+                };
                 
-                <div className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                  <div className="flex items-center mb-2">
-                    <Brain className="w-5 h-5 text-purple-400 mr-2" />
-                    <h3 className="text-white font-semibold">Plateau Prevention</h3>
+                return (
+                  <div key={index} className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
+                    <div className="flex items-center mb-2">
+                      <IconComponent className={`w-5 h-5 ${iconColors[insight.icon] || 'text-green-400'} mr-2`} />
+                      <h3 className="text-white font-semibold">{insight.title}</h3>
+                    </div>
+                    <p className="text-gray-300 text-sm">
+                      {insight.content}
+                    </p>
                   </div>
-                  <p className="text-gray-300 text-sm">
-                    No plateaus detected. Your current progression rate is sustainable 
-                    for the next 8-10 weeks before requiring periodization.
-                  </p>
+                );
+              })}
+              
+              {generateRealInsights().length > 0 && (
+                <div className="lg:col-span-3 mt-4">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleViewFullAnalysis}
+                    className="w-full p-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    View Full Analysis
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </motion.button>
                 </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                  <div className="flex items-center mb-2">
-                    <TrendingUp className="w-5 h-5 text-blue-400 mr-2" />
-                    <h3 className="text-white font-semibold">Future Projections</h3>
-                  </div>
-                  <p className="text-gray-300 text-sm">
-                    Based on current trends, you'll likely achieve a 300lb bench press 
-                    in approximately 14 weeks with 87% confidence.
-                  </p>
-                </div>
-                
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full p-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center"
-                >
-                  <Play className="w-4 h-4 mr-2" />
-                  View Full Analysis
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </motion.button>
-              </div>
+                             )}
             </div>
+            )}
           </motion.div>
         )}
 
@@ -394,50 +570,88 @@ const Dashboard = () => {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-white">Volume Progression</h3>
                 <div className="flex space-x-2">
-                  {['7d', '30d', '90d'].map((range) => (
+                  {[
+                    { key: '7d', label: '7d' },
+                    { key: '30d', label: '30d' },
+                    { key: '90d', label: '90d' },
+                    { key: 'all', label: 'All' }
+                  ].map((range) => (
                     <button
-                      key={range}
-                      onClick={() => setTimeRange(range)}
+                      key={range.key}
+                      onClick={() => setTimeRange(range.key)}
                       className={`px-3 py-1 rounded-lg text-sm transition-all ${
-                        timeRange === range
+                        timeRange === range.key
                           ? 'bg-purple-500 text-white'
                           : 'bg-slate-700 text-gray-400 hover:text-white'
                       }`}
                     >
-                      {range}
+                      {range.label}
                     </button>
                   ))}
                 </div>
               </div>
               
-              <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={analytics.volumeOverTime || []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="date" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1f2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#ffffff'
-                    }} 
-                  />
-                  <defs>
-                    <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area 
-                    type="monotone" 
-                    dataKey="volume" 
-                    stroke="#8b5cf6" 
-                    fill="url(#volumeGradient)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {getFilteredVolumeData().length === 0 ? (
+                <div className="h-[250px] flex items-center justify-center">
+                  <div className="text-center">
+                    <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 text-lg mb-2">No data for this time range</p>
+                    <p className="text-gray-500 text-sm">Try selecting a longer time period</p>
+                  </div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={250}>
+                  <AreaChart data={getFilteredVolumeData()}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="#9ca3af"
+                      tickFormatter={(value) => {
+                        try {
+                          const date = typeof value === 'string' ? parseISO(value) : value;
+                          return format(date, timeRange === '7d' ? 'MMM dd' : timeRange === '30d' ? 'MMM dd' : 'MMM yyyy');
+                        } catch {
+                          return value;
+                        }
+                      }}
+                    />
+                    <YAxis 
+                      stroke="#9ca3af"
+                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1f2937', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px',
+                        color: '#ffffff'
+                      }}
+                      labelFormatter={(value) => {
+                        try {
+                          const date = typeof value === 'string' ? parseISO(value) : value;
+                          return format(date, 'MMM dd, yyyy');
+                        } catch {
+                          return value;
+                        }
+                      }}
+                      formatter={(value) => [`${value.toLocaleString()} lbs`, 'Volume']}
+                    />
+                    <defs>
+                      <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area 
+                      type="monotone" 
+                      dataKey="volume" 
+                      stroke="#8b5cf6" 
+                      fill="url(#volumeGradient)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </motion.div>
 
             {/* Muscle Group Analysis */}
@@ -468,9 +682,9 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Recent Achievements & Quick Actions */}
+        {/* Recent Personal Records & Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Recent Achievements */}
+            {/* Recent Personal Records */}
             <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -480,33 +694,45 @@ const Dashboard = () => {
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-white flex items-center">
                 <Award className="w-6 h-6 text-yellow-400 mr-2" />
-                Recent Achievements
+                Recent Personal Records
                 </h3>
-                <button className="text-purple-400 hover:text-purple-300 text-sm">
+                <button 
+                  onClick={handleViewAllRecords}
+                  className="text-purple-400 hover:text-purple-300 text-sm transition-colors"
+                >
                 View All
                 </button>
             </div>
 
             <div className="space-y-3">
-                {Array.isArray(achievements) ? (
-                achievements.slice(-3).map((achievement, index) => (
-                    <motion.div
-                    key={achievement.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.7 + index * 0.1 }}
-                    className="flex items-center p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl"
-                    >
-                    <div className="text-2xl mr-3">{achievement.icon}</div>
-                    <div className="flex-1">
-                        <p className="text-white font-medium">{achievement.title}</p>
-                        <p className="text-gray-400 text-sm">{achievement.description}</p>
-                    </div>
-                    <div className="text-yellow-400 font-bold">+{achievement.xp} XP</div>
-                    </motion.div>
-                ))
-                ) : (
-                <p className="text-gray-400 text-sm">No achievements available</p>
+                {analytics?.exerciseStats && Object.values(analytics.exerciseStats)
+                  .sort((a, b) => b.maxWeight - a.maxWeight)
+                  .slice(0, 3)
+                  .map((exercise, index) => {
+                    const daysAgo = Math.round((new Date() - new Date(exercise.lastPerformed)) / (1000 * 60 * 60 * 24));
+                    return (
+                      <motion.div
+                        key={exercise.name}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.7 + index * 0.1 }}
+                        className="flex items-center p-3 bg-green-500/10 border border-green-500/20 rounded-xl"
+                      >
+                        <div className="text-2xl mr-3">🏆</div>
+                        <div className="flex-1">
+                          <p className="text-white font-medium">{exercise.name}</p>
+                          <p className="text-gray-400 text-sm">
+                            {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-green-400 font-bold">{exercise.maxWeight} lbs</div>
+                          <div className="text-gray-400 text-xs">Max weight</div>
+                        </div>
+                      </motion.div>
+                    );
+                  }) || (
+                <p className="text-gray-400 text-sm">No exercise data available</p>
                 )}
             </div>
             </motion.div>
@@ -531,6 +757,7 @@ const Dashboard = () => {
                   key={action.label}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={() => handleQuickAction(action)}
                   className={`p-4 bg-gradient-to-r ${action.color} rounded-xl text-white font-medium flex flex-col items-center space-y-2 hover:shadow-lg transition-all`}
                 >
                   <action.icon className="w-6 h-6" />
